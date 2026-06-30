@@ -85,7 +85,9 @@ impl LeaderElector for LeaseLeaderElector {
     }
 
     async fn resign(&self) -> Result<(), ElectionError> {
-        if let Some((mut guard, _)) = self.held.lock().expect("held mutex").take() {
+        // Drop the mutex guard before awaiting release().
+        let taken = self.held.lock().expect("held mutex").take();
+        if let Some((mut guard, _)) = taken {
             guard.release().await;
         }
         Ok(())
