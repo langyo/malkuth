@@ -1,5 +1,4 @@
-//! End-to-end JSON-RPC over TCP, driven under DIFFERENT runtimes to prove the
-//! library is genuinely runtime-agnostic (it only depends on futures_io).
+//! End-to-end JSON-RPC over TCP (tokio).
 
 use std::sync::Arc;
 use malkuth::{Client, Router, Server};
@@ -14,8 +13,7 @@ fn handler() -> Arc<Router> {
 }
 
 #[tokio::test]
-async fn tcp_ping_pong_under_tokio() {
-    // Bind once; hand the SAME listener to the server (no double bind).
+async fn tcp_ping_pong() {
     let lis = TcpTransport.listen("tcp://127.0.0.1:0").await.unwrap();
     let dial = format!("tcp://{}", lis.local_addr().unwrap());
     let h = handler();
@@ -24,20 +22,28 @@ async fn tcp_ping_pong_under_tokio() {
     });
     tokio::time::sleep(std::time::Duration::from_millis(60)).await;
     let mut c = Client::connect(&TcpTransport, &dial).await.unwrap();
-    let r = c.call("ping", json!({})).await.unwrap();
-    assert_eq!(r, json!("pong"));
+    assert_eq!(c.call("ping", json!({})).await.unwrap(), json!("pong"));
 }
 
-#[async_std::test]
-async fn tcp_ping_pong_under_async_std() {
+#[tokio::test]
+async fn tcp_concurrent_clients() {
+    // The spawn-per-connection server handles several clients at once.
     let lis = TcpTransport.listen("tcp://127.0.0.1:0").await.unwrap();
     let dial = format!("tcp://{}", lis.local_addr().unwrap());
     let h = handler();
-    async_std::task::spawn(async move {
+    tokio::spawn(async move {
         let _ = Server::serve_listener(lis, h).await;
     });
-    async_std::task::sleep(std::time::Duration::from_millis(60)).await;
-    let mut c = Client::connect(&TcpTransport, &dial).await.unwrap();
-    let r = c.call("ping", json!({})).await.unwrap();
-    assert_eq!(r, json!("pong"));
+    tokio::time::sleep(std::time::Duration::from_millis(60)).await;
+    let mut tasks = Vec::new();
+    for _ in 0..8 {
+        let dial = dial.clone();
+        tasks.push(tokio::spawn(async move {
+            let mut c = Client::connect(&TcpTransport, &dial).await.unwrap();
+            c.call("ping", json!({})).await.unwrap()
+        }));
+    }
+    for t in tasks {
+        assert_eq!(t.await.unwrap(), json!("pong"));
+    }
 }
