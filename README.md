@@ -104,16 +104,18 @@ Implement `malkuth_core::ExitSource` and hand it to the supervisor.
 | `worker` | Supervised child-process workers (`async-process`) |
 | `axum-probe` | axum `/healthz` + `/readyz` router |
 | `replica` | In-memory `InstanceRegistry` |
-| `file-lock` | POSIX `flock` `CoordinationLock` backend |
+| `file-lock` | POSIX `flock` `CoordinationLock` backend (unix) |
+| `lease` | File-lease `CoordinationLock` with TTL auto-expiry (crash-safe) |
 
 ## Status
 
 Layers 1–3 (lifecycle/drain, probes, listener handoff, coordination lock) and
 the JSON-RPC core (codec + runtime-agnostic server/client + tcp/ws/ipc
 transports) are implemented and tested end-to-end across runtimes. The CLI pod
-pool + sticky proxy is working (e2e-verified). The `leader-follower` /
-`pg-lock` / `lease` strategy backends remain trait contracts with full
-implementations staged. See [docs/design/](docs/en/design/) for the design.
+pool + sticky proxy is working (e2e-verified). The `lease` backend (TTL
+auto-expiry) and the `leader-follower` `LeaseLeaderElector` (Subsystem B)
+are implemented; `pg-lock` remains a trait contract with a full backend
+staged. See [docs/design/](docs/en/design/) for the design.
 
 ## License
 
