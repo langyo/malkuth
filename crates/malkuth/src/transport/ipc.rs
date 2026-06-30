@@ -2,20 +2,32 @@
 //! Unix, named pipes on Windows).
 //!
 //! Note: `interprocess`'s async support is tokio-only, so this transport
-//! requires the tokio runtime. The TCP and WebSocket transports are fully
-//! runtime-agnostic (tokio / async-std / smol). Address forms: `ipc:/full/path`
-//! (a filesystem socket path) or `ipc:name` (a short name).
+//! requires the tokio runtime (the TCP and WebSocket transports are fully
+//! runtime-agnostic). Address forms: `ipc:/full/path` (filesystem socket path)
+//! or `ipc:name` (a short / namespaced name).
 
 use std::io;
 
 use async_trait::async_trait;
+use interprocess::local_socket::traits::tokio::{Listener as _, Stream as _};
 use interprocess::local_socket::tokio::{Listener as LocalSocketListener, Stream as LocalSocketStream};
+use interprocess::local_socket::{
+    GenericFilePath, GenericNamespaced, ListenerOptions, Name, ToFsName, ToNsName,
+};
 use malkuth_core::{FramedConn, Transport, WireConn, WireListener};
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
-/// Strip the `ipc:` scheme prefix.
-fn name_of(addr: &str) -> String {
-    addr.strip_prefix("ipc:").unwrap_or(addr).to_string()
+/// Build an interprocess [`Name`] from an `ipc:` address.
+fn to_name(addr: &str) -> io::Result<Name<'_>> {
+    let s = addr.strip_prefix("ipc:").unwrap_or(addr);
+    let make_err = |e: Box<dyn std::error::Error + Send + Sync>| {
+        io::Error::new(io::ErrorKind::InvalidInput, format!("invalid local-socket name: {e}"))
+    };
+    if s.starts_with('/') {
+        s.to_fs_name::<GenericFilePath>().map_err(make_err)
+    } else {
+        s.to_ns_name::<GenericNamespaced>().map_err(make_err)
+    }
 }
 
 /// Local IPC transport.
@@ -24,19 +36,19 @@ pub struct IpcTransport;
 #[async_trait]
 impl Transport for IpcTransport {
     async fn listen(&self, addr: &str) -> io::Result<Box<dyn WireListener>> {
-        let name = name_of(addr);
+        let name = to_name(addr)?;
         // Best-effort cleanup of a stale socket file on unix.
         #[cfg(unix)]
-        if name.starts_with('/') {
-            let _ = std::fs::remove_file(&name);
+        if let Some(path) = addr.strip_prefix("ipc:").filter(|p| p.starts_with('/')) {
+            let _ = std::fs::remove_file(path);
         }
-        let listener = LocalSocketListener::bind(name.as_str())?;
+        let listener = ListenerOptions::new().name(name).create_tokio()?;
         Ok(Box::new(IpcWireListener { listener }))
     }
 
     async fn connect(&self, addr: &str) -> io::Result<Box<dyn WireConn>> {
-        let name = name_of(addr);
-        let stream = LocalSocketStream::connect(name.as_str()).await?;
+        let name = to_name(addr)?;
+        let stream = LocalSocketStream::connect(name).await?;
         Ok(Box::new(FramedConn::new(stream.compat())))
     }
 
@@ -57,7 +69,6 @@ impl WireListener for IpcWireListener {
     }
 
     fn local_addr(&self) -> io::Result<String> {
-        // interprocess doesn't always expose the bound name; report a placeholder.
         Ok("ipc:local".to_string())
     }
 }
