@@ -58,7 +58,9 @@ futures-core = { workspace = true }
 # transports
 async-net = { workspace = true, optional = true }
 async-tungstenite = { workspace = true, optional = true }
-interprocess = { workspace = true, optional = true }
+interprocess = { workspace = true, optional = true, features = ["tokio"] }
+tokio = { workspace = true, optional = true }
+tokio-util = { workspace = true, optional = true }
 
 # default facilities
 async-signal = { workspace = true, optional = true }
