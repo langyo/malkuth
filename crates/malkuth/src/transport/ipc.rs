@@ -9,7 +9,7 @@
 use std::io;
 
 use async_trait::async_trait;
-use interprocess::local_socket::tokio::{LocalSocketListener, LocalSocketStream};
+use interprocess::local_socket::tokio::{Listener as LocalSocketListener, Stream as LocalSocketStream};
 use malkuth_core::{FramedConn, Transport, WireConn, WireListener};
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
