@@ -15,13 +15,12 @@ fn handler() -> Arc<Router> {
 
 #[tokio::test]
 async fn tcp_ping_pong_under_tokio() {
+    // Bind once; hand the SAME listener to the server (no double bind).
     let lis = TcpTransport.listen("tcp://127.0.0.1:0").await.unwrap();
-    let addr = lis.local_addr().unwrap();
-    let bind = format!("tcp://{addr}");
-    let dial = bind.clone();
+    let dial = format!("tcp://{}", lis.local_addr().unwrap());
     let h = handler();
     tokio::spawn(async move {
-        let _ = Server::serve(&TcpTransport, &bind, h).await;
+        let _ = Server::serve_listener(lis, h).await;
     });
     tokio::time::sleep(std::time::Duration::from_millis(60)).await;
     let mut c = Client::connect(&TcpTransport, &dial).await.unwrap();
@@ -32,12 +31,10 @@ async fn tcp_ping_pong_under_tokio() {
 #[async_std::test]
 async fn tcp_ping_pong_under_async_std() {
     let lis = TcpTransport.listen("tcp://127.0.0.1:0").await.unwrap();
-    let addr = lis.local_addr().unwrap();
-    let bind = format!("tcp://{addr}");
-    let dial = bind.clone();
+    let dial = format!("tcp://{}", lis.local_addr().unwrap());
     let h = handler();
     async_std::task::spawn(async move {
-        let _ = Server::serve(&TcpTransport, &bind, h).await;
+        let _ = Server::serve_listener(lis, h).await;
     });
     async_std::task::sleep(std::time::Duration::from_millis(60)).await;
     let mut c = Client::connect(&TcpTransport, &dial).await.unwrap();

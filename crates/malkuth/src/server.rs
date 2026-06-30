@@ -1,10 +1,10 @@
 //! Runtime-agnostic JSON-RPC server.
 //!
-//! [`Server::serve`] drives an accept loop over a [`Transport`] and handles
-//! every connection concurrently **without spawning** — it multiplexes them
-//! with a [`FuturesUnordered`], so the whole thing is driven by whichever
-//! executor the caller used to `await` `serve`. No `tokio::spawn` /
-//! `async_std::task::spawn` anywhere → runs under any runtime.
+//! [`Server::serve_listener`] drives an accept loop over a pre-bound
+//! [`WireListener`] and handles every connection concurrently **without
+//! spawning** — it multiplexes them with a [`FuturesUnordered`], so the whole
+//! thing is driven by whichever executor the caller used to `await` it. No
+//! `tokio::spawn` / `async_std::task::spawn` anywhere → runs under any runtime.
 
 use std::sync::Arc;
 
@@ -20,11 +20,7 @@ use crate::jsonrpc::{Id, Request, Response, RpcHandler};
 pub struct Server;
 
 impl Server {
-    /// Accept connections on `transport.listen(addr)` forever, dispatching each
-    /// request through `handler`. Returns only on a fatal accept error.
-    ///
-    /// Concurrency is multiplexed (not spawned) — suitable for a moderate number
-    /// of long-lived supervision connections (worker heartbeats, control RPCs).
+    /// Bind `addr` on `transport`, then serve forever.
     pub async fn serve<H>(
         transport: &dyn Transport,
         addr: &str,
@@ -33,7 +29,19 @@ impl Server {
     where
         H: RpcHandler + ?Sized,
     {
-        let listener: Box<dyn WireListener> = transport.listen(addr).await?;
+        let listener = transport.listen(addr).await?;
+        Self::serve_listener(listener, handler).await
+    }
+
+    /// Serve on an already-bound listener (avoids a double bind when the caller
+    /// needs to inspect [`WireListener::local_addr`] first).
+    pub async fn serve_listener<H>(
+        listener: Box<dyn WireListener>,
+        handler: Arc<H>,
+    ) -> std::io::Result<()>
+    where
+        H: RpcHandler + ?Sized,
+    {
         let mut conns: FuturesUnordered<std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>> =
             FuturesUnordered::new();
 
