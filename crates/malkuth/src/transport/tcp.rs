@@ -2,7 +2,6 @@
 //! async-std / smol).
 
 use async_trait::async_trait;
-use futures_util::AsyncReadExt;
 use malkuth_core::{FramedConn, Transport, WireConn, WireListener};
 
 /// Strip an optional `tcp://` scheme prefix; pass the rest through.
@@ -37,7 +36,6 @@ impl WireListener for TcpWireListener {
     async fn accept(&self) -> std::io::Result<Box<dyn WireConn>> {
         let (stream, _peer) = self.listener.accept().await?;
         // keep the read-ext import in scope / used
-        let _ = AsyncReadExt::read;
         Ok(Box::new(FramedConn::new(stream)))
     }
 }

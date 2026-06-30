@@ -33,7 +33,7 @@ impl Server {
     where
         H: RpcHandler + ?Sized,
     {
-        let listener: Box<dyn WireListener> = transport.listen(addr)?;
+        let listener: Box<dyn WireListener> = transport.listen(addr).await?;
         let mut conns: FuturesUnordered<std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>> =
             FuturesUnordered::new();
 
