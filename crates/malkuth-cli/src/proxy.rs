@@ -45,6 +45,7 @@ impl Ring {
         Self { points, backends }
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.backends.is_empty()
     }
@@ -54,6 +55,7 @@ impl Ring {
     }
 
     /// Pick the backend owning `key` (first point ≥ hash(key), wrapping).
+    #[allow(dead_code)]
     pub fn route(&self, key: &str) -> Option<&Backend> {
         if self.points.is_empty() {
             return None;

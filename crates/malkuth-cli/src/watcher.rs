@@ -48,10 +48,7 @@ pub fn spawn(paths: Vec<PathBuf>) -> mpsc::Receiver<()> {
             match ev {
                 Ok(e) if matches!(e.kind, EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)) => {
                     let now = std::time::Instant::now();
-                    let fire = match last_fire {
-                        Some(t) if now.duration_since(t) < DEBOUNCE => false,
-                        _ => true,
-                    };
+                    let fire = !matches!(last_fire, Some(t) if now.duration_since(t) < DEBOUNCE);
                     if fire {
                         last_fire = Some(now);
                         info!(?e.paths, "file change → schedule restart");

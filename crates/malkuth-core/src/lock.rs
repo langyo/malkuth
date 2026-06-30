@@ -78,7 +78,7 @@ impl CoordinationLock for FileLock {
             if r != 0 {
                 let err = io::Error::last_os_error();
                 // EAGAIN / EWOULDBLOCK ⇒ contended; anything else ⇒ io error.
-                if matches!(err.raw_os_error(), Some(libc::EAGAIN) | Some(libc::EWOULDBLOCK)) {
+                if matches!(err.raw_os_error(), Some(libc::EAGAIN)) {
                     return Err(LockError::Contended(format!(
                         "flock on '{key_owned}' is held by another live process"
                     )));

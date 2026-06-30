@@ -15,6 +15,8 @@ use axum::routing::get;
 
 use malkuth_core::{DependencyCheck, DrainState, HealthStatus, ProbeSink, ReadyStatus};
 
+type DepChecker = std::sync::Arc<dyn Fn() -> bool + Send + Sync>;
+
 /// Shared state for the probe routes + the [`ProbeSink`] impl. Clone it cheaply.
 #[derive(Clone)]
 pub struct ProbeState {
@@ -26,7 +28,7 @@ struct ProbeInner {
     start: Instant,
     drain_state: std::sync::Mutex<DrainState>,
     generation: std::sync::Mutex<Option<u64>>,
-    deps: std::sync::Mutex<Vec<(String, Arc<dyn Fn() -> bool + Send + Sync>)>>,
+    deps: std::sync::Mutex<Vec<(String, DepChecker)>>,
 }
 
 impl ProbeState {

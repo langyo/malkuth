@@ -24,11 +24,12 @@ struct Pod {
 }
 
 impl Pod {
-    async fn kill(&mut self) {
+    async fn kill(&mut self, drain_secs: u64) {
         if let Some(mut child) = self.child.take() {
-            // Best-effort graceful: start_kill sends SIGTERM on unix.
+            // Best-effort graceful: start_kill sends SIGTERM on unix; give the
+            // process up to `drain_secs` to exit, then drop it (kill_on_drop).
             let _ = child.start_kill();
-            let _ = child.wait().await;
+            let _ = tokio::time::timeout(Duration::from_secs(drain_secs.max(1)), child.wait()).await;
         }
     }
 }
@@ -83,7 +84,7 @@ impl PodManager {
         info!(pod = id, "rolling restart: draining pod");
         let mut pods = self.pods.lock().await;
         if let Some(pod) = pods.get_mut(&id) {
-            pod.kill().await;
+            pod.kill(self.drain_secs).await;
         }
         drop(pods);
         // Respawn is handled by the supervise loop's exit detection.

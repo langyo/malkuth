@@ -7,7 +7,7 @@ use std::io;
 use async_trait::async_trait;
 use async_tungstenite::tungstenite::Message;
 use async_tungstenite::{WebSocketStream, accept_async, client_async};
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use malkuth_core::{Transport, WireConn, WireListener};
 use serde_json::Value;
 use tracing::debug;
