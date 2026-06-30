@@ -7,7 +7,7 @@
 use std::fs::OpenOptions;
 use std::io;
 use std::os::fd::AsRawFd;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
 use async_trait::async_trait;

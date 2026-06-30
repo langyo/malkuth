@@ -208,7 +208,6 @@ pub fn assign_ports(ports: impl Iterator<Item = u16>, count: usize, skip: u16) -
         .filter(|p| *p != skip)
         .take(count)
         .enumerate()
-        .map(|(i, p)| (i, p))
         .collect()
 }
 

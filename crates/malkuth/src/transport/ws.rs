@@ -43,7 +43,7 @@ impl Transport for WsTransport {
         let stream = async_net::TcpStream::connect(&hp).await?;
         let (ws, _resp) = client_async(url, stream)
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("ws connect: {e}")))?;
+            .map_err(|e| io::Error::other(format!("ws connect: {e}")))?;
         Ok(Box::new(WsConn { ws }))
     }
 
@@ -62,7 +62,7 @@ impl WireListener for WsWireListener {
         let (tcp, _peer) = self.listener.accept().await?;
         let ws = accept_async(tcp)
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("ws accept: {e}")))?;
+            .map_err(|e| io::Error::other(format!("ws accept: {e}")))?;
         Ok(Box::new(WsConn { ws }))
     }
 
@@ -84,7 +84,7 @@ impl WireConn for WsConn {
                 None => return Ok(None),
                 Some(Err(e)) => {
                     debug!(error = %e, "ws read error");
-                    return Err(io::Error::new(io::ErrorKind::Other, format!("ws read: {e}")));
+                    return Err(io::Error::other(format!("ws read: {e}")));
                 }
                 Some(Ok(msg)) => {
                     if msg.is_close() {
@@ -112,7 +112,7 @@ impl WireConn for WsConn {
         self.ws
             .send(Message::text(s))
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("ws write: {e}")))?;
+            .map_err(|e| io::Error::other(format!("ws write: {e}")))?;
         Ok(())
     }
 }

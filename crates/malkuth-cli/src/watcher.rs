@@ -21,7 +21,7 @@ pub fn spawn(paths: Vec<PathBuf>) -> mpsc::Receiver<()> {
     }
     let tx_signal = tx.clone();
     std::thread::spawn(move || {
-        let (evt_tx, mut evt_rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
+        let (evt_tx, evt_rx) = std::sync::mpsc::channel::<notify::Result<notify::Event>>();
         let mut watcher = match RecommendedWatcher::new(
             move |res| {
                 let _ = evt_tx.send(res);

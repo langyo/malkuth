@@ -36,13 +36,10 @@ async fn main() {
     }
 
     // Parse proxy spec (if any) and decide the backend port range.
-    let proxy_spec = match args.proxy.as_deref() {
-        Some(s) => Some(ProxySpec::parse(s).unwrap_or_else(|e| {
+    let proxy_spec = args.proxy.as_deref().map(|s| ProxySpec::parse(s).unwrap_or_else(|e| {
             error!("{e}");
             std::process::exit(2);
-        })),
-        None => None,
-    };
+        }));
 
     // Assign backend ports to each pod.
     let ports = match &proxy_spec {
@@ -55,7 +52,7 @@ async fn main() {
     };
 
     // Build proxy state (if a proxy spec was given).
-    let proxy_state = proxy_spec.map(|spec| {
+    let proxy_state = proxy_spec.map(|_spec| {
         Arc::new(ProxyState::new(Duration::from_secs(args.sticky_ttl_secs)))
     });
     if let Some(spec) = proxy_spec {
