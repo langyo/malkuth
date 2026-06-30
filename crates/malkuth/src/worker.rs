@@ -28,18 +28,26 @@ pub struct WorkerSpec {
     pub kind: String,
     pub program: String,
     pub args: Vec<String>,
+    /// Extra environment variables handed to the child process.
+    pub env: Vec<(String, String)>,
     pub restart_policy: RestartPolicy,
 }
 
 impl WorkerSpec {
     #[must_use]
     pub fn new(id: impl Into<String>, kind: impl Into<String>, program: impl Into<String>) -> Self {
-        Self { id: id.into(), kind: kind.into(), program: program.into(), args: Vec::new(), restart_policy: RestartPolicy::Permanent }
+        Self { id: id.into(), kind: kind.into(), program: program.into(), args: Vec::new(), env: Vec::new(), restart_policy: RestartPolicy::Permanent }
     }
     #[must_use]
     pub fn args<I, S>(mut self, args: I) -> Self
     where I: IntoIterator<Item = S>, S: Into<String> {
         self.args = args.into_iter().map(Into::into).collect();
+        self
+    }
+    #[must_use]
+    pub fn env<K, V>(mut self, k: K, v: V) -> Self
+    where K: Into<String>, V: Into<String> {
+        self.env.push((k.into(), v.into()));
         self
     }
     #[must_use]
@@ -165,6 +173,9 @@ async fn supervise_one(
 fn spawn(spec: &WorkerSpec) -> std::io::Result<Child> {
     let mut cmd = Command::new(&spec.program);
     cmd.args(&spec.args);
+    for (k, v) in &spec.env {
+        cmd.env(k, v);
+    }
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::inherit());
     cmd.stderr(Stdio::inherit());
