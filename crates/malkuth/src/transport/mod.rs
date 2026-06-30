@@ -49,7 +49,7 @@ impl MultiTransport {
         }
         #[cfg(feature = "tcp")]
         {
-            return Box::new(TcpTransport);
+            Box::new(TcpTransport)
         }
         #[cfg(not(feature = "tcp"))]
         {

@@ -8,7 +8,6 @@
 
 use std::time::{Duration, Instant};
 
-use async_trait::async_trait;
 use futures_util::stream::{FuturesUnordered, StreamExt};
 use malkuth_core::{DrainController, RestartPolicy, WorkerInfo, WorkerStatus};
 use std::process::Stdio;
@@ -147,7 +146,7 @@ async fn supervise_one(
                 }
             }
             _ = drain.wait_for_drain() => {
-                let _ = child.kill();
+                let _ = child.kill().await;
                 break;
             }
         }
