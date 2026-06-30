@@ -20,13 +20,13 @@ use tokio_util::compat::TokioAsyncReadCompatExt;
 /// Build an interprocess [`Name`] from an `ipc:` address.
 fn to_name(addr: &str) -> io::Result<Name<'_>> {
     let s = addr.strip_prefix("ipc:").unwrap_or(addr);
-    let make_err = |e: Box<dyn std::error::Error + Send + Sync>| {
+    let map = |e: impl std::fmt::Display| {
         io::Error::new(io::ErrorKind::InvalidInput, format!("invalid local-socket name: {e}"))
     };
     if s.starts_with('/') {
-        s.to_fs_name::<GenericFilePath>().map_err(make_err)
+        s.to_fs_name::<GenericFilePath>().map_err(map)
     } else {
-        s.to_ns_name::<GenericNamespaced>().map_err(make_err)
+        s.to_ns_name::<GenericNamespaced>().map_err(map)
     }
 }
 
