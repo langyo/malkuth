@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use futures_util::{select, FutureExt};
 
-use malkuth_core::{DrainController, DrainHook, ExitSource, Transport};
+use malkuth_core::{DrainController, DrainHook, ExitSource, Transport, WireListener};
 
 use crate::jsonrpc::RpcHandler;
 use crate::Server;
@@ -79,14 +79,18 @@ impl Supervised {
         self
     }
 
-    /// Serve JSON-RPC on `addr` until the exit source fires (or the server
-    /// ends), then run the drain hooks. Runs under any runtime (no spawn).
-    pub async fn serve_rpc<H>(self, transport: &dyn Transport, addr: &str, handler: Arc<H>) -> std::io::Result<()>
+    /// Serve on a pre-bound listener (avoids a double bind when you need
+    /// [`WireListener::local_addr`] first). Runs under any runtime (no spawn).
+    pub async fn serve_rpc_listener<H>(
+        self,
+        listener: Box<dyn WireListener>,
+        handler: Arc<H>,
+    ) -> std::io::Result<()>
     where
         H: RpcHandler + ?Sized + 'static,
     {
         let ctrl = self.drain.clone();
-        let server_fut = Server::serve(transport, addr, handler);
+        let server_fut = Server::serve_listener(listener, handler);
         match self.exit {
             None => {
                 let _ = server_fut.await;
@@ -103,5 +107,14 @@ impl Supervised {
             let _ = hook.drain(self.drain_budget).await;
         }
         Ok(())
+    }
+
+    /// Bind `addr` on `transport`, then [`serve_rpc_listener`].
+    pub async fn serve_rpc<H>(self, transport: &dyn Transport, addr: &str, handler: Arc<H>) -> std::io::Result<()>
+    where
+        H: RpcHandler + ?Sized + 'static,
+    {
+        let listener = transport.listen(addr).await?;
+        self.serve_rpc_listener(listener, handler).await
     }
 }
