@@ -14,10 +14,9 @@ path = "src/main.rs"
 
 [features]
 default = ["full"]
-full = ["malkuth/tcp", "malkuth/signals", "malkuth/worker"]
+full = []
 
 [dependencies]
-malkuth.workspace = true
 malkuth-core = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 tokio = { workspace = true }
