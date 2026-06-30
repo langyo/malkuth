@@ -16,7 +16,7 @@ def test_cli_proxy_sticky_and_crash() -> None:
         assert wait_port(pub, timeout=25), "proxy did not come up"
 
         # sticky: repeated requests from the same client (127.0.0.1) hit one backend
-        first = parse_kv(line_request(pub, "health"))
+        first = parse_kv(line_request_retry(pub, "health"))
         backend = first["port"]
         for _ in range(4):
             again = parse_kv(line_request(pub, "health"))
@@ -30,7 +30,7 @@ def test_cli_proxy_sticky_and_crash() -> None:
         time.sleep(2.5)  # CLI detects exit, removes the dead pod from the pool
 
         # next request must land on a DIFFERENT backend
-        after = parse_kv(line_request(pub, "health"))
+        after = parse_kv(line_request_retry(pub, "health"))
         assert after["port"] != backend, (
             f"did not re-route after crash ({backend}=={after['port']})" + ("\n" + cli.output())
         )

@@ -120,3 +120,16 @@ class Proc:
 # a stable, informative label for a test failure that includes the captured log
 def fail_log(proc: "Proc") -> str:
     return "\n----- captured output -----\n" + proc.output() + "\n---------------------------"
+
+def line_request_retry(port: int, cmd: str, timeout: float = 20.0) -> str:
+    """Retry line_request; the proxy may accept before any backend is registered."""
+    end = time.time() + timeout
+    last: Exception = RuntimeError("no attempt")
+    while time.time() < end:
+        try:
+            return line_request(port, cmd, timeout=2.0)
+        except OSError as e:
+            last = e
+            time.sleep(0.2)
+    raise last
+
