@@ -1,25 +1,21 @@
-//! WebSocket transport via [`async_tungstenite`] (no runtime feature — works
-//! under tokio / async-std / smol). One JSON value per WS text message (WS
-//! frames are already delimited, so no NDJSON framing is needed here).
+//! WebSocket transport via [`tokio_tungstenite`]. One JSON value per WS text
+//! message (WS frames are already delimited — no NDJSON framing needed here).
 
 use std::io;
 
 use async_trait::async_trait;
-use async_tungstenite::tungstenite::Message;
-use async_tungstenite::{WebSocketStream, accept_async, client_async};
-use futures_util::StreamExt;
+use futures_util::{SinkExt, StreamExt};
 use malkuth_core::{Transport, WireConn, WireListener};
 use serde_json::Value;
+use tokio::net::{TcpListener, TcpStream};
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{WebSocketStream, accept_async, client_async};
 use tracing::debug;
 
-/// Strip a `ws://` / `wss://` scheme prefix.
 fn strip_scheme(addr: &str) -> &str {
-    addr.strip_prefix("ws://")
-        .or_else(|| addr.strip_prefix("wss://"))
-        .unwrap_or(addr)
+    addr.strip_prefix("ws://").or_else(|| addr.strip_prefix("wss://")).unwrap_or(addr)
 }
 
-/// Split a ws address into `(host:port, full_url)`.
 fn split_ws(addr: &str) -> (String, String) {
     let url = if addr.contains("://") { addr.to_string() } else { format!("ws://{addr}") };
     let without = strip_scheme(&url);
@@ -34,13 +30,13 @@ pub struct WsTransport;
 impl Transport for WsTransport {
     async fn listen(&self, addr: &str) -> io::Result<Box<dyn WireListener>> {
         let hp = strip_scheme(addr).split('/').next().unwrap_or("").to_string();
-        let listener = async_net::TcpListener::bind(&hp).await?;
+        let listener = TcpListener::bind(&hp).await?;
         Ok(Box::new(WsWireListener { listener }))
     }
 
     async fn connect(&self, addr: &str) -> io::Result<Box<dyn WireConn>> {
         let (hp, url) = split_ws(addr);
-        let stream = async_net::TcpStream::connect(&hp).await?;
+        let stream = TcpStream::connect(&hp).await?;
         let (ws, _resp) = client_async(url, stream)
             .await
             .map_err(|e| io::Error::other(format!("ws connect: {e}")))?;
@@ -53,7 +49,7 @@ impl Transport for WsTransport {
 }
 
 pub struct WsWireListener {
-    listener: async_net::TcpListener,
+    listener: TcpListener,
 }
 
 #[async_trait]
@@ -73,7 +69,7 @@ impl WireListener for WsWireListener {
 
 /// A WebSocket connection framed as JSON messages.
 pub struct WsConn {
-    ws: WebSocketStream<async_net::TcpStream>,
+    ws: WebSocketStream<TcpStream>,
 }
 
 #[async_trait]
@@ -94,8 +90,7 @@ impl WireConn for WsConn {
                         continue;
                     }
                     if msg.is_text() {
-                        let txt = msg.into_text()
-                            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("ws text: {e}")))?;
+                        let txt = msg.into_text().map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("ws text: {e}")))?;
                         return Ok(Some(serde_json::from_str(&txt)?));
                     }
                     if msg.is_binary() {
@@ -109,10 +104,7 @@ impl WireConn for WsConn {
 
     async fn write_msg(&mut self, msg: &Value) -> io::Result<()> {
         let s = serde_json::to_string(msg)?;
-        self.ws
-            .send(Message::text(s))
-            .await
-            .map_err(|e| io::Error::other(format!("ws write: {e}")))?;
+        self.ws.send(Message::text(s)).await.map_err(|e| io::Error::other(format!("ws write: {e}")))?;
         Ok(())
     }
 }

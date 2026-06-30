@@ -1,27 +1,21 @@
-//! Local IPC transport via the [`interprocess`] crate (Unix domain sockets on
-//! Unix, named pipes on Windows).
-//!
-//! Note: `interprocess`'s async support is tokio-only, so this transport
-//! requires the tokio runtime (the TCP and WebSocket transports are fully
-//! runtime-agnostic). Address forms: `ipc:/full/path` (filesystem socket path)
-//! or `ipc:name` (a short / namespaced name).
+//! Local IPC transport via [`interprocess`] (Unix domain sockets on Unix, named
+//! pipes on Windows), tokio async. Address forms: `ipc:/full/path` (filesystem
+//! socket path) or `ipc:name` (a short / namespaced name).
 
 use std::io;
 
 use async_trait::async_trait;
 use interprocess::local_socket::traits::tokio::{Listener as _, Stream as _};
 use interprocess::local_socket::tokio::{Listener as LocalSocketListener, Stream as LocalSocketStream};
-use interprocess::local_socket::{
-    GenericFilePath, GenericNamespaced, ListenerOptions, Name, ToFsName, ToNsName,
-};
-use malkuth_core::{FramedConn, Transport, WireConn, WireListener};
-use tokio_util::compat::TokioAsyncReadCompatExt;
+use interprocess::local_socket::{GenericFilePath, GenericNamespaced, ListenerOptions, Name, ToFsName, ToNsName};
+use malkuth_core::{Transport, WireConn, WireListener};
+
+use crate::codec::FramedConn;
 
 fn name_err<E: std::fmt::Display>(e: E) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, format!("invalid local-socket name: {e}"))
 }
 
-/// Build an interprocess [`Name`] from an `ipc:` address.
 fn to_name(addr: &str) -> io::Result<Name<'_>> {
     let s = addr.strip_prefix("ipc:").unwrap_or(addr);
     if s.starts_with('/') {
@@ -38,7 +32,6 @@ pub struct IpcTransport;
 impl Transport for IpcTransport {
     async fn listen(&self, addr: &str) -> io::Result<Box<dyn WireListener>> {
         let name = to_name(addr)?;
-        // Best-effort cleanup of a stale socket file on unix.
         #[cfg(unix)]
         if let Some(path) = addr.strip_prefix("ipc:").filter(|p| p.starts_with('/')) {
             let _ = std::fs::remove_file(path);
@@ -50,7 +43,7 @@ impl Transport for IpcTransport {
     async fn connect(&self, addr: &str) -> io::Result<Box<dyn WireConn>> {
         let name = to_name(addr)?;
         let stream = LocalSocketStream::connect(name).await?;
-        Ok(Box::new(FramedConn::new(stream.compat())))
+        Ok(Box::new(FramedConn::new(stream)))
     }
 
     fn name(&self) -> &'static str {
@@ -66,7 +59,7 @@ pub struct IpcWireListener {
 impl WireListener for IpcWireListener {
     async fn accept(&self) -> io::Result<Box<dyn WireConn>> {
         let stream = self.listener.accept().await?;
-        Ok(Box::new(FramedConn::new(stream.compat())))
+        Ok(Box::new(FramedConn::new(stream)))
     }
 
     fn local_addr(&self) -> io::Result<String> {

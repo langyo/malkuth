@@ -1,15 +1,12 @@
-//! Batteries-included service orchestrator.
+//! Batteries-included service orchestrator (tokio).
 //!
-//! [`Supervised`] composes the pluggable pieces with sensible defaults: a shared
-//! [`DrainController`], an optional [`ExitSource`] (OS signals by default when
-//! the `signals` feature is on), and a set of [`DrainHook`]s run during
-//! shutdown. [`Supervised::serve_rpc`] races the JSON-RPC server against the
-//! exit source — **without spawning** — so it runs under any runtime.
+//! [`Supervised`] composes the pluggable pieces: a shared [`DrainController`],
+//! an optional [`ExitSource`] (OS signals by default with the `signals`
+//! feature), and [`DrainHook`]s run during shutdown. [`Supervised::serve_rpc`]
+//! races the JSON-RPC server against the exit source, then runs the drain hooks.
 
 use std::sync::Arc;
 use std::time::Duration;
-
-use futures_util::{select, FutureExt};
 
 use malkuth_core::{DrainController, DrainHook, ExitSource, Transport, WireListener};
 
@@ -31,8 +28,6 @@ impl Default for Supervised {
 }
 
 impl Supervised {
-    /// Start building. Nothing is draining yet; no exit source by default
-    /// (call `.signals()` or `.exit(...)` to install one).
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -43,13 +38,10 @@ impl Supervised {
         }
     }
 
-    /// A clone of the shared drain controller — wire it into your probes /
-    /// registry / worker supervisor before serving.
     pub fn drain_controller(&self) -> DrainController {
         self.drain.clone()
     }
 
-    /// Install a custom exit source (overrides any previous).
     pub fn exit<E>(mut self, source: E) -> Self
     where
         E: ExitSource + 'static,
@@ -58,13 +50,11 @@ impl Supervised {
         self
     }
 
-    /// Install the default OS-signal exit source (`signals` feature).
     #[cfg(feature = "signals")]
     pub fn signals(self) -> Self {
         self.exit(crate::signals::SignalExitSource)
     }
 
-    /// Add a drain hook run (in order) during shutdown.
     pub fn on_drain<H>(mut self, hook: H) -> Self
     where
         H: DrainHook + 'static,
@@ -73,14 +63,11 @@ impl Supervised {
         self
     }
 
-    /// Budget given to each drain hook (default 30s).
     pub fn drain_budget(mut self, budget: Duration) -> Self {
         self.drain_budget = budget;
         self
     }
 
-    /// Serve on a pre-bound listener (avoids a double bind when you need
-    /// [`WireListener::local_addr`] first). Runs under any runtime (no spawn).
     pub async fn serve_rpc_listener<H>(
         self,
         listener: Box<dyn WireListener>,
@@ -96,10 +83,9 @@ impl Supervised {
                 let _ = server_fut.await;
             }
             Some(exit) => {
-                let exit_fut = exit.wait(ctrl.clone());
-                select! {
-                    _r = server_fut.fuse() => {}
-                    _ = exit_fut.fuse() => {}
+                tokio::select! {
+                    _ = server_fut => {}
+                    _ = exit.wait(ctrl) => {}
                 }
             }
         }
@@ -109,7 +95,6 @@ impl Supervised {
         Ok(())
     }
 
-    /// Bind `addr` on `transport`, then [`serve_rpc_listener`].
     pub async fn serve_rpc<H>(self, transport: &dyn Transport, addr: &str, handler: Arc<H>) -> std::io::Result<()>
     where
         H: RpcHandler + ?Sized + 'static,

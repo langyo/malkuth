@@ -1,8 +1,4 @@
-//! Pluggable transport backends for JSON-RPC.
-//!
-//! Each backend implements [`malkuth_core::Transport`] and yields
-//! [`malkuth_core::FramedConn`]-wrapped streams. They all sit on the
-//! `futures_io` traits, so they run under tokio, async-std or smol.
+//! Pluggable transport backends for JSON-RPC (all tokio-based).
 
 #[cfg(feature = "tcp")]
 pub mod tcp;
@@ -21,9 +17,7 @@ pub use ipc::IpcTransport;
 
 /// A transport that dispatches by URL scheme to the built-in backends.
 ///
-/// Enabled backends are tried in order; the first whose scheme prefix matches
-/// the address handles it. Schemes:
-/// - `tcp://host:port` (or a bare `host:port`) → [`TcpTransport`]
+/// - `tcp://host:port` (or bare `host:port`) → [`TcpTransport`]
 /// - `ws://…` / `wss://…` → [`WsTransport`]  (feature `ws`)
 /// - `ipc:/path` or `ipc:name` → [`IpcTransport`]  (feature `ipc`)
 ///
@@ -44,24 +38,21 @@ impl malkuth_core::Transport for MultiTransport {
 }
 
 impl MultiTransport {
-    /// Pick the backend for `addr` by scheme.
-    fn pick(&self, addr: &str) -> Box<dyn malkuth_core::Transport> {
+    fn pick(&self, _addr: &str) -> Box<dyn malkuth_core::Transport> {
         #[cfg(feature = "ws")]
-        if let Some(rest) = addr.strip_prefix("ws://").or_else(|| addr.strip_prefix("wss://")) {
-            let _ = rest;
+        if _addr.starts_with("ws://") || _addr.starts_with("wss://") {
             return Box::new(WsTransport);
         }
         #[cfg(feature = "ipc")]
-        if addr.starts_with("ipc:") {
+        if _addr.starts_with("ipc:") {
             return Box::new(IpcTransport);
         }
         #[cfg(feature = "tcp")]
         {
-            Box::new(TcpTransport)
+            return Box::new(TcpTransport);
         }
         #[cfg(not(feature = "tcp"))]
         {
-            let _ = addr;
             panic!("no transport feature enabled (enable tcp/ws/ipc)");
         }
     }

@@ -1,17 +1,17 @@
-//! Supervised child-process workers — **runtime-agnostic** (async-process).
+//! Supervised child-process workers (tokio::process).
 //!
-//! Each [`WorkerSpec`] is one independently-killable child process holding one
+//! Each [`WorkerSpec`] is one independently-killable child holding one
 //! resource. [`Supervisor`] spawns them and restarts per their
 //! [`RestartPolicy`] (`permanent` / `transient` / `temporary`), with a
-//! sliding-window rate limit to prevent crash storms. Workers are supervised
-//! concurrently via a `FuturesUnordered` (no runtime spawn needed).
+//! sliding-window rate limit to prevent crash storms. Each worker runs in its
+//! own tokio task.
 
 use std::time::{Duration, Instant};
 
-use async_process::{Child, Command, Stdio};
+use async_trait::async_trait;
 use futures_util::stream::{FuturesUnordered, StreamExt};
-use futures_util::{select, FutureExt};
 use malkuth_core::{DrainController, RestartPolicy, WorkerInfo, WorkerStatus};
+use tokio::process::{Child, Command, Stdio};
 use tracing::{info, warn};
 
 /// Default sliding window for restart rate-limiting.
@@ -76,19 +76,20 @@ impl Supervisor {
 
     /// Run the supervision loop until `drain` begins, then return final snapshots.
     pub async fn run(self, drain: DrainController) -> Vec<WorkerInfo> {
-        let mut handles: FuturesUnordered<std::pin::Pin<Box<dyn std::future::Future<Output = WorkerInfo> + Send>>> =
-            FuturesUnordered::new();
+        let mut handles = FuturesUnordered::new();
         for spec in self.specs {
             let drain = drain.clone();
             let (max_restarts, window, cooldown) = (self.max_restarts, self.window, self.cooldown);
-            handles.push(Box::pin(async move {
+            handles.push(tokio::spawn(async move {
                 supervise_one(spec, max_restarts, window, cooldown, drain).await
-            })
-                as std::pin::Pin<Box<dyn std::future::Future<Output = WorkerInfo> + Send>>);
+            }));
         }
         let mut results = Vec::new();
-        while let Some(info) = handles.next().await {
-            results.push(info);
+        while let Some(joined) = handles.next().await {
+            match joined {
+                Ok(info) => results.push(info),
+                Err(e) => warn!(error = %e, "supervision task panicked"),
+            }
         }
         results
     }
@@ -126,8 +127,8 @@ async fn supervise_one(
         };
 
         // Race child exit against drain.
-        select! {
-            status = child.status().fuse() => {
+        tokio::select! {
+            status = child.wait() => {
                 match status {
                     Ok(s) => {
                         let clean = s.success();
@@ -144,8 +145,7 @@ async fn supervise_one(
                     break;
                 }
             }
-            _ = drain.wait_for_drain().fuse() => {
-                // Best-effort kill on drain.
+            _ = drain.wait_for_drain() => {
                 let _ = child.kill();
                 break;
             }
@@ -168,6 +168,7 @@ fn spawn(spec: &WorkerSpec) -> std::io::Result<Child> {
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::inherit());
     cmd.stderr(Stdio::inherit());
+    cmd.kill_on_drop(true);
     cmd.spawn()
 }
 
@@ -179,7 +180,6 @@ fn should_restart(policy: RestartPolicy, clean_exit: bool) -> bool {
     }
 }
 
-/// Returns true if the rate limit tripped (after sleeping the cooldown).
 async fn rate_limited(
     restart_times: &mut Vec<Instant>,
     max_restarts: u32,
@@ -192,12 +192,9 @@ async fn rate_limited(
     restart_times.push(now);
     if restart_times.len() as u32 > max_restarts {
         warn!(restarts = restart_times.len(), "restart rate limit tripped, entering cooldown");
-        // Sleep `cooldown`, but wake early if drain begins.
-        let timer = futures_util::FutureExt::fuse(async_io::Timer::after(cooldown));
-        futures_util::pin_mut!(timer);
-        select! {
-            _ = timer => {}
-            _ = drain.wait_for_drain().fuse() => {}
+        tokio::select! {
+            _ = tokio::time::sleep(cooldown) => {}
+            _ = drain.wait_for_drain() => {}
         }
         restart_times.clear();
         true

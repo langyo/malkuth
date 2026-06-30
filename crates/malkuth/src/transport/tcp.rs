@@ -1,10 +1,13 @@
-//! TCP transport via [`async_net`] — runtime-agnostic (works under tokio /
-//! async-std / smol).
+//! TCP transport via [`tokio::net`] (loopback or remote).
+
+use std::io;
 
 use async_trait::async_trait;
-use malkuth_core::{FramedConn, Transport, WireConn, WireListener};
+use malkuth_core::{Transport, WireConn, WireListener};
+use tokio::net::{TcpListener, TcpStream};
 
-/// Strip an optional `tcp://` scheme prefix; pass the rest through.
+use crate::codec::FramedConn;
+
 fn strip(addr: &str) -> &str {
     addr.strip_prefix("tcp://").unwrap_or(addr)
 }
@@ -14,12 +17,12 @@ pub struct TcpTransport;
 
 #[async_trait]
 impl Transport for TcpTransport {
-    async fn listen(&self, addr: &str) -> std::io::Result<Box<dyn WireListener>> {
-        let listener = async_net::TcpListener::bind(strip(addr)).await?;
+    async fn listen(&self, addr: &str) -> io::Result<Box<dyn WireListener>> {
+        let listener = TcpListener::bind(strip(addr)).await?;
         Ok(Box::new(TcpWireListener { listener }))
     }
-    async fn connect(&self, addr: &str) -> std::io::Result<Box<dyn WireConn>> {
-        let stream = async_net::TcpStream::connect(strip(addr)).await?;
+    async fn connect(&self, addr: &str) -> io::Result<Box<dyn WireConn>> {
+        let stream = TcpStream::connect(strip(addr)).await?;
         Ok(Box::new(FramedConn::new(stream)))
     }
     fn name(&self) -> &'static str {
@@ -28,16 +31,16 @@ impl Transport for TcpTransport {
 }
 
 pub struct TcpWireListener {
-    listener: async_net::TcpListener,
+    listener: TcpListener,
 }
 
 #[async_trait]
 impl WireListener for TcpWireListener {
-    async fn accept(&self) -> std::io::Result<Box<dyn WireConn>> {
+    async fn accept(&self) -> io::Result<Box<dyn WireConn>> {
         let (stream, _peer) = self.listener.accept().await?;
         Ok(Box::new(FramedConn::new(stream)))
     }
-    fn local_addr(&self) -> std::io::Result<String> {
+    fn local_addr(&self) -> io::Result<String> {
         Ok(format!("{}", self.listener.local_addr()?))
     }
 }

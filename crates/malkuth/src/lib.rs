@@ -6,6 +6,7 @@
 //! async-I/O family, so it runs under tokio, async-std or smol.
 
 pub mod client;
+pub mod codec;
 pub mod jsonrpc;
 pub mod server;
 pub mod service;

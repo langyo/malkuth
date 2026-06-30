@@ -1,69 +1,38 @@
-//! Runtime-agnostic JSON-RPC server.
-//!
-//! [`Server::serve_listener`] drives an accept loop over a pre-bound
-//! [`WireListener`] and handles every connection concurrently **without
-//! spawning** — it multiplexes them with a [`FuturesUnordered`], so the whole
-//! thing is driven by whichever executor the caller used to `await` it. No
-//! `tokio::spawn` / `async_std::task::spawn` anywhere → runs under any runtime.
+//! JSON-RPC server (tokio). One task per connection via `tokio::spawn`.
 
 use std::sync::Arc;
 
-use futures_util::stream::{FuturesUnordered, StreamExt};
-use futures_util::{select, FutureExt};
-use tracing::{debug, warn};
-
 use malkuth_core::{Transport, WireConn, WireListener};
+use tracing::{debug, warn};
 
 use crate::jsonrpc::{Id, Request, Response, RpcHandler};
 
-/// A JSON-RPC server. Stateless beyond the handler it wraps.
+/// A JSON-RPC server.
 pub struct Server;
 
 impl Server {
     /// Bind `addr` on `transport`, then serve forever.
-    pub async fn serve<H>(
-        transport: &dyn Transport,
-        addr: &str,
-        handler: Arc<H>,
-    ) -> std::io::Result<()>
+    pub async fn serve<H>(transport: &dyn Transport, addr: &str, handler: Arc<H>) -> std::io::Result<()>
     where
-        H: RpcHandler + ?Sized,
+        H: RpcHandler + ?Sized + 'static,
     {
         let listener = transport.listen(addr).await?;
         Self::serve_listener(listener, handler).await
     }
 
-    /// Serve on an already-bound listener (avoids a double bind when the caller
-    /// needs to inspect [`WireListener::local_addr`] first).
-    pub async fn serve_listener<H>(
-        listener: Box<dyn WireListener>,
-        handler: Arc<H>,
-    ) -> std::io::Result<()>
+    /// Serve on a pre-bound listener (avoids a double bind when you need
+    /// [`WireListener::local_addr`] first).
+    pub async fn serve_listener<H>(listener: Box<dyn WireListener>, handler: Arc<H>) -> std::io::Result<()>
     where
-        H: RpcHandler + ?Sized,
+        H: RpcHandler + ?Sized + 'static,
     {
-        let mut conns: FuturesUnordered<std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>> =
-            FuturesUnordered::new();
-
         loop {
-            // Race accept against the completion of an existing connection.
-            select! {
-                res = listener.accept().fuse() => match res {
-                    Ok(conn) => {
-                        let h = handler.clone();
-                        conns.push(Box::pin(async move { serve_conn(conn, h).await; })
-                            as std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>);
-                    }
-                    Err(e) => warn!(error = %e, "accept failed"),
-                },
-                done = conns.next() => { let _ = done; }
-            }
-            // Opportunistically drain already-finished connections (bursts).
-            while !conns.is_empty() {
-                match conns.next().now_or_never() {
-                    Some(Some(())) => {}
-                    _ => break,
+            match listener.accept().await {
+                Ok(conn) => {
+                    let h = handler.clone();
+                    tokio::spawn(async move { serve_conn(conn, h).await; });
                 }
+                Err(e) => warn!(error = %e, "accept failed"),
             }
         }
     }
