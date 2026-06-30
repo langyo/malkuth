@@ -1,12 +1,12 @@
 [package]
-name = "plana"
+name = "malkuth"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["langyo <langyo.china@gmail.com>"]
 license = "BUSL-1.1"
 description = "Generic Rust toolkit for service supervision: uniform signal/drain semantics, split /healthz + /readyz probes, supervised child-process workers, systemd socket-activation listener handoff, and a pluggable coordination-lock abstraction."
-repository = "https://github.com/celestia-island/plana"
+repository = "https://github.com/celestia-island/malkuth"
 keywords = ["supervisor", "graceful-shutdown", "rolling-update", "socket-activation", "high-availability"]
 categories = ["asynchronous", "network-programming", "development-tools"]
 publish = true

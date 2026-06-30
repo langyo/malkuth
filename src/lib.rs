@@ -1,4 +1,4 @@
-//! # plana
+//! # malkuth
 //!
 //! A small, generic Rust toolkit for supervising long-running services:
 //!
@@ -13,7 +13,7 @@
 //!
 //! These are the building blocks for load-balanced replicas, rolling
 //! updates and leader/follower HA. Originally factored out of the
-//! celestia-island platform (entelecheia, shittim-chest, evernight); plana
+//! celestia-island platform (entelecheia, shittim-chest, evernight); malkuth
 //! itself is framework-light and depends only on tokio + axum.
 
 pub mod lifecycle;
