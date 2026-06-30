@@ -12,14 +12,12 @@
 //!   using a per-pod `DrainController` + `Supervisor`.
 
 use std::env;
-use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 use malkuth::worker::{Supervisor, WorkerSpec};
 use malkuth_core::{DrainController, RestartPolicy, ShutdownKind};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::process::Command;
 use tokio::task::JoinHandle;
 
 #[tokio::main]
@@ -63,8 +61,8 @@ fn flag<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
 
 async fn worker() {
     let port: u16 = env::var("PORT").ok().and_then(|p| p.parse().ok()).expect("PORT env required");
-    let gen: u64 = env::var("GEN").ok().and_then(|g| g.parse().ok()).unwrap_or(0);
-    eprintln!("WORKER_READY port={port} gen={gen} pid={}", std::process::id());
+    let generation: u64 = env::var("GEN").ok().and_then(|g| g.parse().ok()).unwrap_or(0);
+    eprintln!("WORKER_READY port={port} gen={generation} pid={}", std::process::id());
     let listener = match TcpListener::bind(("127.0.0.1", port)).await {
         Ok(l) => l,
         Err(e) => {
@@ -80,11 +78,11 @@ async fn worker() {
                 continue;
             }
         };
-        tokio::spawn(async move { handle_client(sock, port, gen).await; });
+        tokio::spawn(async move { handle_client(sock, port, generation).await; });
     }
 }
 
-async fn handle_client(stream: TcpStream, port: u16, gen: u64) {
+async fn handle_client(stream: TcpStream, port: u16, generation: u64) {
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
     loop {
@@ -99,7 +97,7 @@ async fn handle_client(stream: TcpStream, port: u16, gen: u64) {
         let cmd = line.trim();
         let reply: Vec<u8> = match cmd {
             "ping" => b"pong\n".to_vec(),
-            "health" => format!("port={port};gen={gen};pid={}\n", std::process::id()).into_bytes(),
+            "health" => format!("port={port};gen={generation};pid={}\n", std::process::id()).into_bytes(),
             "crash" => {
                 eprintln!("WORKER_CRASH port={port} (requested)");
                 std::process::exit(1);
@@ -114,10 +112,10 @@ async fn handle_client(stream: TcpStream, port: u16, gen: u64) {
 
 // ── supervise mode ─────────────────────────────────────────────
 
-async fn supervise(pods: usize, port_base: u16) {
+async fn supervise(pods_n: usize, port_base: u16) {
     let exe = env::current_exe().expect("current_exe");
     let mut specs = Vec::new();
-    for i in 0..pods {
+    for i in 0..pods_n {
         let port = port_base + 1 + i as u16;
         specs.push(
             WorkerSpec::new(format!("w{i}"), "app", exe.to_string_lossy().to_string())
@@ -127,19 +125,19 @@ async fn supervise(pods: usize, port_base: u16) {
                 .policy(RestartPolicy::Permanent),
         );
     }
-    eprintln!("SUPERVISE_START pods={pods} port_base={port_base}");
+    eprintln!("SUPERVISE_START pods={pods_n} port_base={port_base}");
     let drain = DrainController::new();
     let sup = Supervisor::new(specs);
     tokio::select! {
-        _ = tokio::signal::ctrl_c() => { eprintln!("SUPERVISE_STOP signal"); drain.begin_drain(ShutdownKind::Graceful); }
+        _ = tokio::signal::ctrl_c() => {
+            eprintln!("SUPERVISE_STOP signal; draining");
+            drain.begin_drain(ShutdownKind::Graceful);
+        }
         infos = sup.run(drain.clone()) => {
-            for i in infos { eprintln!("SUPERVISE_FINAL {i:?}"); }
+            for info in infos { eprintln!("SUPERVISE_FINAL {info:?}"); }
             return;
         }
     }
-    // ctrl_c path: run drain to completion
-    // (re-run is not possible; Supervisor::run consumed specs — so just exit)
-    let _ = drain;
     eprintln!("SUPERVISE_EXIT");
 }
 
@@ -151,18 +149,18 @@ struct Pod {
     task: JoinHandle<()>,
 }
 
-fn spawn_pod(exe: &str, port: u16, gen: u64) -> Pod {
+fn spawn_pod(exe: &str, port: u16, generation: u64) -> Pod {
     let spec = WorkerSpec::new(format!("pod-{port}"), "app", exe.to_string())
         .args(["worker"])
         .env("PORT", port.to_string())
-        .env("GEN", gen.to_string())
+        .env("GEN", generation.to_string())
         .policy(RestartPolicy::Permanent);
     let ctrl = DrainController::new();
     let run_ctrl = ctrl.clone();
     let task = tokio::spawn(async move {
         let infos = Supervisor::new(vec![spec]).run(run_ctrl).await;
-        for i in infos {
-            eprintln!("POD_FINAL {i:?}");
+        for info in infos {
+            eprintln!("POD_FINAL {info:?}");
         }
     });
     Pod { port, ctrl, task }
@@ -184,17 +182,16 @@ async fn wait_healthy(port: u16, deadline: Duration) -> bool {
     false
 }
 
-async fn rolling(pods: usize, port_base: u16) {
+async fn rolling(pods_n: usize, port_base: u16) {
     let exe = env::current_exe().expect("current_exe");
     let exe = exe.to_string_lossy().to_string();
-    let gen0_ports: Vec<u16> = (0..pods).map(|i| port_base + 1 + i as u16).collect();
-    let gen1_ports: Vec<u16> = (0..pods).map(|i| port_base + 1 + pods as u16 + i as u16).collect();
+    let gen0_ports: Vec<u16> = (0..pods_n).map(|i| port_base + 1 + i as u16).collect();
+    let gen1_ports: Vec<u16> = (0..pods_n).map(|i| port_base + 1 + pods_n as u16 + i as u16).collect();
 
     // gen-0 up
     let mut gen0: Vec<Pod> = Vec::new();
     for &p in &gen0_ports {
-        let pod = spawn_pod(&exe, p, 0);
-        gen0.push(pod);
+        gen0.push(spawn_pod(&exe, p, 0));
     }
     for &p in &gen0_ports {
         if !wait_healthy(p, Duration::from_secs(10)).await {
@@ -204,30 +201,24 @@ async fn rolling(pods: usize, port_base: u16) {
     }
     eprintln!("ROLLING_GEN0_READY ports={gen0_ports:?}");
 
-    // gradual update: for each pod, bring up the gen-1 counterpart, then drain gen-0
+    // gradual update: bring up each gen-1 pod, then drain the matching gen-0 pod
     let mut gen1: Vec<Pod> = Vec::new();
-    for i in 0..pods {
+    for i in 0..pods_n {
         let p1 = gen1_ports[i];
-        let pod = spawn_pod(&exe, p1, 1);
+        gen1.push(spawn_pod(&exe, p1, 1));
         if !wait_healthy(p1, Duration::from_secs(10)).await {
             eprintln!("ROLLING_FAIL gen1 port={p1} not healthy");
             std::process::exit(1);
         }
-        gen1.push(pod);
         drain_pod(gen0.remove(0)).await;
         eprintln!("ROLLING_STEP {i} gen1={p1} up, gen0 drained");
     }
-    eprintln!("ROLLING_DONE gen1 serving ports={:?}", gen1.iter().map(|p| p.port).collect::<Vec<_>>());
+    let gen1_serving: Vec<u16> = gen1.iter().map(|p| p.port).collect();
+    eprintln!("ROLLING_DONE gen1 serving ports={gen1_serving:?}");
 
-    // run gen-1 until ctrl-c
     _ = tokio::signal::ctrl_c().await;
     eprintln!("ROLLING_STOP signal");
     for pod in gen1 {
         drain_pod(pod).await;
     }
 }
-
-// keep Stdio import used (Command referenced indirectly via WorkerSpec in malkuth);
-// silence unused warnings for the manual argv parser paths.
-#[allow(dead_code)]
-fn _unused(_: Stdio) {}
