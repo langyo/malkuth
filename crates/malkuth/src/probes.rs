@@ -50,7 +50,11 @@ impl ProbeState {
     where
         F: Fn() -> bool + Send + Sync + 'static,
     {
-        self.inner.deps.lock().unwrap().push((name.into(), Arc::new(check)));
+        self.inner
+            .deps
+            .lock()
+            .unwrap()
+            .push((name.into(), Arc::new(check)));
     }
 
     /// Set the drain state (Active / Draining / Reloading).
@@ -85,7 +89,12 @@ impl ProbeSink for ProbeState {
             });
         }
         let ready = !draining && all_ok;
-        ReadyStatus { ready, draining, dependencies, generation }
+        ReadyStatus {
+            ready,
+            draining,
+            dependencies,
+            generation,
+        }
     }
 
     async fn health(&self) -> HealthStatus {

@@ -16,8 +16,8 @@
 //! [`crate::ExitSource`](crate::hooks::ExitSource), or a plain
 //! [`DrainController::begin_drain`] call.
 
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use event_listener::Event;
 

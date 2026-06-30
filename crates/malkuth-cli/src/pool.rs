@@ -54,7 +54,10 @@ impl PodManager {
         ports: HashMap<usize, u16>,
         drain_secs: u64,
     ) -> Self {
-        let restart = ports.keys().map(|id| (*id, Arc::new(Notify::new()))).collect();
+        let restart = ports
+            .keys()
+            .map(|id| (*id, Arc::new(Notify::new())))
+            .collect();
         Self {
             host,
             port_env,
@@ -72,7 +75,9 @@ impl PodManager {
     pub async fn run(self: Arc<Self>) {
         for &id in self.ports.keys() {
             let this = Arc::clone(&self);
-            tokio::spawn(async move { this.supervise(id).await; });
+            tokio::spawn(async move {
+                this.supervise(id).await;
+            });
         }
     }
 
@@ -85,7 +90,9 @@ impl PodManager {
     }
 
     async fn supervise(self: Arc<Self>, id: usize) {
-        let Some(&port) = self.ports.get(&id) else { return };
+        let Some(&port) = self.ports.get(&id) else {
+            return;
+        };
         let notify = Arc::clone(&self.restart[&id]);
         loop {
             // spawn + wait for readiness, then register with the proxy.
@@ -170,7 +177,9 @@ impl PodManager {
 }
 
 fn backends_from(host: &str, meta: &HashMap<usize, PodMeta>) -> Vec<Backend> {
-    let host_ip = host.parse().unwrap_or_else(|_| "127.0.0.1".parse().unwrap());
+    let host_ip = host
+        .parse()
+        .unwrap_or_else(|_| "127.0.0.1".parse().unwrap());
     meta.iter()
         .map(|(id, m)| Backend {
             addr: SocketAddr::new(host_ip, m.port),
@@ -180,12 +189,15 @@ fn backends_from(host: &str, meta: &HashMap<usize, PodMeta>) -> Vec<Backend> {
 }
 
 /// Assign `count` distinct ports from `ports`, skipping `skip`.
-pub fn assign_ports(ports: impl Iterator<Item = u16>, count: usize, skip: u16) -> HashMap<usize, u16> {
+pub fn assign_ports(
+    ports: impl Iterator<Item = u16>,
+    count: usize,
+    skip: u16,
+) -> HashMap<usize, u16> {
     ports
         .filter(|p| *p != skip)
         .take(count)
         .enumerate()
-        .map(|(i, p)| (i, p))
         .collect()
 }
 

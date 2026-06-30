@@ -1,15 +1,13 @@
 //! End-to-end JSON-RPC over TCP (tokio).
 
-use std::sync::Arc;
-use malkuth::{Client, Router, Server};
 use malkuth::transport::TcpTransport;
+use malkuth::{Client, Router, Server};
 use malkuth_core::Transport;
 use serde_json::json;
+use std::sync::Arc;
 
 fn handler() -> Arc<Router> {
-    Arc::new(Router::new().route("ping", |_p| {
-        Box::pin(async { Ok(json!("pong")) })
-    }))
+    Arc::new(Router::new().route("ping", |_p| Box::pin(async { Ok(json!("pong")) })))
 }
 
 #[tokio::test]

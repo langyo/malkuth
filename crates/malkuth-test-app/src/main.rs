@@ -29,7 +29,9 @@ async fn main() {
         "supervise" => supervise(pods(&args), port_base(&args)).await,
         "rolling" => rolling(pods(&args), port_base(&args)).await,
         other => {
-            eprintln!("usage: malkuth-test-app worker | supervise --pods N --port-base B | rolling --pods N --port-base B");
+            eprintln!(
+                "usage: malkuth-test-app worker | supervise --pods N --port-base B | rolling --pods N --port-base B"
+            );
             eprintln!("  (got: {other:?})");
             std::process::exit(2);
         }
@@ -37,10 +39,14 @@ async fn main() {
 }
 
 fn pods(args: &[String]) -> usize {
-    flag(args, "--pods").and_then(|v| v.parse().ok()).unwrap_or(3)
+    flag(args, "--pods")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3)
 }
 fn port_base(args: &[String]) -> u16 {
-    flag(args, "--port-base").and_then(|v| v.parse().ok()).unwrap_or(0)
+    flag(args, "--port-base")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0)
 }
 fn flag<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
     let mut it = args.iter();
@@ -60,9 +66,18 @@ fn flag<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
 // ── worker mode ────────────────────────────────────────────────
 
 async fn worker() {
-    let port: u16 = env::var("PORT").ok().and_then(|p| p.parse().ok()).expect("PORT env required");
-    let generation: u64 = env::var("GEN").ok().and_then(|g| g.parse().ok()).unwrap_or(0);
-    eprintln!("WORKER_READY port={port} gen={generation} pid={}", std::process::id());
+    let port: u16 = env::var("PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .expect("PORT env required");
+    let generation: u64 = env::var("GEN")
+        .ok()
+        .and_then(|g| g.parse().ok())
+        .unwrap_or(0);
+    eprintln!(
+        "WORKER_READY port={port} gen={generation} pid={}",
+        std::process::id()
+    );
     let listener = match TcpListener::bind(("127.0.0.1", port)).await {
         Ok(l) => l,
         Err(e) => {
@@ -78,7 +93,9 @@ async fn worker() {
                 continue;
             }
         };
-        tokio::spawn(async move { handle_client(sock, port, generation).await; });
+        tokio::spawn(async move {
+            handle_client(sock, port, generation).await;
+        });
     }
 }
 
@@ -97,7 +114,9 @@ async fn handle_client(stream: TcpStream, port: u16, generation: u64) {
         let cmd = line.trim();
         let reply: Vec<u8> = match cmd {
             "ping" => b"pong\n".to_vec(),
-            "health" => format!("port={port};gen={generation};pid={}\n", std::process::id()).into_bytes(),
+            "health" => {
+                format!("port={port};gen={generation};pid={}\n", std::process::id()).into_bytes()
+            }
             "crash" => {
                 eprintln!("WORKER_CRASH port={port} (requested)");
                 std::process::exit(1);
@@ -186,7 +205,9 @@ async fn rolling(pods_n: usize, port_base: u16) {
     let exe = env::current_exe().expect("current_exe");
     let exe = exe.to_string_lossy().to_string();
     let gen0_ports: Vec<u16> = (0..pods_n).map(|i| port_base + 1 + i as u16).collect();
-    let gen1_ports: Vec<u16> = (0..pods_n).map(|i| port_base + 1 + pods_n as u16 + i as u16).collect();
+    let gen1_ports: Vec<u16> = (0..pods_n)
+        .map(|i| port_base + 1 + pods_n as u16 + i as u16)
+        .collect();
 
     // gen-0 up
     let mut gen0: Vec<Pod> = Vec::new();

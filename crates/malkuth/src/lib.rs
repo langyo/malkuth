@@ -12,26 +12,26 @@ pub mod server;
 pub mod service;
 pub mod transport;
 
-#[cfg(feature = "worker")]
-pub mod worker;
-#[cfg(feature = "axum-probe")]
-pub mod probes;
-#[cfg(feature = "signals")]
-pub mod signals;
-#[cfg(feature = "replica")]
-pub mod registry;
-#[cfg(feature = "pg-lock")]
-pub mod pg_lock;
 #[cfg(feature = "leader-follower")]
 pub mod leader;
+#[cfg(feature = "pg-lock")]
+pub mod pg_lock;
+#[cfg(feature = "axum-probe")]
+pub mod probes;
+#[cfg(feature = "replica")]
+pub mod registry;
+#[cfg(feature = "signals")]
+pub mod signals;
+#[cfg(feature = "worker")]
+pub mod worker;
 
 pub use client::Client;
-pub use jsonrpc::{Id, Request, Response, RpcError, RpcHandler, Router};
-pub use server::Server;
-pub use service::Supervised;
+pub use jsonrpc::{Id, Request, Response, Router, RpcError, RpcHandler};
 #[cfg(feature = "leader-follower")]
 pub use leader::LeaseLeaderElector;
 #[cfg(feature = "pg-lock")]
 pub use pg_lock::PgLock;
+pub use server::Server;
+pub use service::Supervised;
 
 pub use malkuth_core;

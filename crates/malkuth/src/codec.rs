@@ -34,7 +34,10 @@ where
 {
     /// Wrap a duplex stream.
     pub fn new(stream: S) -> Self {
-        Self { stream, rd_buf: Vec::with_capacity(8192) }
+        Self {
+            stream,
+            rd_buf: Vec::with_capacity(8192),
+        }
     }
 }
 
@@ -58,7 +61,10 @@ where
                 return if self.rd_buf.is_empty() {
                     Ok(None)
                 } else {
-                    Err(io::Error::new(io::ErrorKind::UnexpectedEof, "connection closed mid-frame"))
+                    Err(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        "connection closed mid-frame",
+                    ))
                 };
             }
             self.rd_buf.extend_from_slice(&tmp[..n]);

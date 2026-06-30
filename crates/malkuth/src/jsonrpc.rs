@@ -52,7 +52,9 @@ impl<'de> Deserialize<'de> for Id {
                 .map(Id::Num)
                 .ok_or_else(|| serde::de::Error::custom("numeric id must be a u64")),
             Value::String(s) => Ok(Id::Str(s)),
-            _ => Err(serde::de::Error::custom("id must be null, number or string")),
+            _ => Err(serde::de::Error::custom(
+                "id must be null, number or string",
+            )),
         }
     }
 }
@@ -81,15 +83,27 @@ impl RpcError {
     }
     /// Standard "invalid params" (-32602).
     pub fn invalid_params(msg: impl Into<String>) -> Self {
-        Self { code: -32602, message: msg.into(), data: None }
+        Self {
+            code: -32602,
+            message: msg.into(),
+            data: None,
+        }
     }
     /// Standard "parse error" (-32700).
     pub fn parse_error(msg: impl Into<String>) -> Self {
-        Self { code: -32700, message: msg.into(), data: None }
+        Self {
+            code: -32700,
+            message: msg.into(),
+            data: None,
+        }
     }
     /// Generic server error (-32000).
     pub fn server(msg: impl Into<String>) -> Self {
-        Self { code: -32000, message: msg.into(), data: None }
+        Self {
+            code: -32000,
+            message: msg.into(),
+            data: None,
+        }
     }
 }
 
@@ -111,11 +125,21 @@ pub struct Request {
 impl Request {
     /// Build a request (call) with a numeric id.
     pub fn call(id: u64, method: impl Into<String>, params: Value) -> Self {
-        Self { jsonrpc: "2.0".into(), id: Some(Id::Num(id)), method: method.into(), params }
+        Self {
+            jsonrpc: "2.0".into(),
+            id: Some(Id::Num(id)),
+            method: method.into(),
+            params,
+        }
     }
     /// Build a notification (no id, no reply).
     pub fn notify(method: impl Into<String>, params: Value) -> Self {
-        Self { jsonrpc: "2.0".into(), id: None, method: method.into(), params }
+        Self {
+            jsonrpc: "2.0".into(),
+            id: None,
+            method: method.into(),
+            params,
+        }
     }
 }
 
@@ -137,11 +161,21 @@ pub struct Response {
 impl Response {
     /// Successful response.
     pub fn ok(id: Id, result: Value) -> Self {
-        Self { jsonrpc: "2.0".into(), id, result: Some(result), error: None }
+        Self {
+            jsonrpc: "2.0".into(),
+            id,
+            result: Some(result),
+            error: None,
+        }
     }
     /// Error response.
     pub fn err(id: Id, error: RpcError) -> Self {
-        Self { jsonrpc: "2.0".into(), id, result: None, error: Some(error) }
+        Self {
+            jsonrpc: "2.0".into(),
+            id,
+            result: None,
+            error: Some(error),
+        }
     }
 }
 
@@ -159,7 +193,8 @@ pub trait RpcHandler: Send + Sync {
 }
 
 /// A boxed async handler closure: `Fn(params) -> BoxFuture<Result<Value>>`.
-pub type HandlerFn = Arc<dyn Fn(Value) -> BoxFuture<'static, Result<Value, RpcError>> + Send + Sync>;
+pub type HandlerFn =
+    Arc<dyn Fn(Value) -> BoxFuture<'static, Result<Value, RpcError>> + Send + Sync>;
 
 /// A simple method-name → handler router that implements [`RpcHandler`].
 pub struct Router {
@@ -176,7 +211,9 @@ impl Router {
     /// Create an empty router.
     #[must_use]
     pub fn new() -> Self {
-        Self { handlers: std::collections::HashMap::new() }
+        Self {
+            handlers: std::collections::HashMap::new(),
+        }
     }
 
     /// Register a handler for `name`.
@@ -204,7 +241,9 @@ impl RpcHandler for Router {
 
 // ── standard lifecycle method registration ─────────────────────
 
-use malkuth_core::{methods, DrainController, DrainResponse, HealthStatus, ProbeSink, ReadyStatus, ShutdownKind};
+use malkuth_core::{
+    DrainController, DrainResponse, HealthStatus, ProbeSink, ReadyStatus, ShutdownKind, methods,
+};
 
 impl Router {
     /// Register the standard lifecycle RPC methods (`Lifecycle.Drain`,
@@ -225,7 +264,11 @@ impl Router {
             let d = drain_for_rpc.clone();
             Box::pin(async move {
                 d.begin_drain(ShutdownKind::Graceful);
-                Ok(serde_json::to_value(DrainResponse { accepted: true, draining: true }).unwrap())
+                Ok(serde_json::to_value(DrainResponse {
+                    accepted: true,
+                    draining: true,
+                })
+                .unwrap())
             })
         });
         let drain_for_reload = drain.clone();
@@ -246,7 +289,12 @@ impl Router {
                     Some(p) => p.ready().await,
                     None => {
                         let draining = d.is_draining();
-                        ReadyStatus { ready: !draining, draining, dependencies: Vec::new(), generation: None }
+                        ReadyStatus {
+                            ready: !draining,
+                            draining,
+                            dependencies: Vec::new(),
+                            generation: None,
+                        }
                     }
                 };
                 Ok(serde_json::to_value(status).unwrap())
@@ -271,11 +319,10 @@ impl Router {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn response_ok_serializes() {

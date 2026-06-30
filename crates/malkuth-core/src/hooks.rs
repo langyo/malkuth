@@ -12,9 +12,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
-use crate::{
-    DrainController, HealthStatus, HeartbeatBeat, ReadyStatus, ShutdownKind,
-};
+use crate::{DrainController, HealthStatus, HeartbeatBeat, ReadyStatus, ShutdownKind};
 
 /// Why an [`ExitSource`] fired.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,15 +27,24 @@ pub struct ExitReason {
 impl ExitReason {
     /// A graceful drain that should terminate the process.
     pub const fn graceful() -> Self {
-        Self { kind: ShutdownKind::Graceful, should_exit: true }
+        Self {
+            kind: ShutdownKind::Graceful,
+            should_exit: true,
+        }
     }
     /// An immediate (skip-drain) exit.
     pub const fn immediate() -> Self {
-        Self { kind: ShutdownKind::Immediate, should_exit: true }
+        Self {
+            kind: ShutdownKind::Immediate,
+            should_exit: true,
+        }
     }
     /// A reload: drain bit stays clear, process keeps running.
     pub const fn reload() -> Self {
-        Self { kind: ShutdownKind::Reload, should_exit: false }
+        Self {
+            kind: ShutdownKind::Reload,
+            should_exit: false,
+        }
     }
 }
 

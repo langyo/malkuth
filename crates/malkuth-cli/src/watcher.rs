@@ -46,7 +46,12 @@ pub fn spawn(paths: Vec<PathBuf>) -> mpsc::Receiver<()> {
         let mut last_fire: Option<std::time::Instant> = None;
         while let Ok(ev) = evt_rx.recv() {
             match ev {
-                Ok(e) if matches!(e.kind, EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)) => {
+                Ok(e)
+                    if matches!(
+                        e.kind,
+                        EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
+                    ) =>
+                {
                     let now = std::time::Instant::now();
                     let fire = !matches!(last_fire, Some(t) if now.duration_since(t) < DEBOUNCE);
                     if fire {

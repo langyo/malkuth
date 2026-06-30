@@ -54,7 +54,10 @@ impl CoordinationLock for PgLock {
             .map_err(|e| LockError::Io(io::Error::other(format!("pg lock: {e}"))))?;
         let got: bool = row.get(0);
         if got {
-            Ok(Box::new(PgGuard { client: Arc::clone(&self.client), key: k }))
+            Ok(Box::new(PgGuard {
+                client: Arc::clone(&self.client),
+                key: k,
+            }))
         } else {
             Err(LockError::Contended(format!(
                 "pg advisory lock on '{key}' held by another live session"

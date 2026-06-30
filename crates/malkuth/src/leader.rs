@@ -127,13 +127,23 @@ mod tests {
         let b = LeaseLeaderElector::new(dir, "device-a", "leader-B", "device-a");
         assert!(a.try_acquire(Duration::from_secs(2)).await.unwrap());
         // B is contended while A holds the lease.
-        let r = tokio::time::timeout(Duration::from_millis(300), b.try_acquire(Duration::from_secs(2))).await;
+        let r = tokio::time::timeout(
+            Duration::from_millis(300),
+            b.try_acquire(Duration::from_secs(2)),
+        )
+        .await;
         let became = matches!(r, Ok(Ok(true)));
         assert!(!became, "B should not become leader while A holds");
-        assert_eq!(a.current().await.unwrap().unwrap().leader_instance_id, "leader-A");
+        assert_eq!(
+            a.current().await.unwrap().unwrap().leader_instance_id,
+            "leader-A"
+        );
         a.resign().await.unwrap();
         // Now B can take over.
         assert!(b.try_acquire(Duration::from_secs(2)).await.unwrap());
-        assert_eq!(b.current().await.unwrap().unwrap().leader_instance_id, "leader-B");
+        assert_eq!(
+            b.current().await.unwrap().unwrap().leader_instance_id,
+            "leader-B"
+        );
     }
 }

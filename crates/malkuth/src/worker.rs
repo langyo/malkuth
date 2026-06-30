@@ -36,17 +36,30 @@ pub struct WorkerSpec {
 impl WorkerSpec {
     #[must_use]
     pub fn new(id: impl Into<String>, kind: impl Into<String>, program: impl Into<String>) -> Self {
-        Self { id: id.into(), kind: kind.into(), program: program.into(), args: Vec::new(), env: Vec::new(), restart_policy: RestartPolicy::Permanent }
+        Self {
+            id: id.into(),
+            kind: kind.into(),
+            program: program.into(),
+            args: Vec::new(),
+            env: Vec::new(),
+            restart_policy: RestartPolicy::Permanent,
+        }
     }
     #[must_use]
     pub fn args<I, S>(mut self, args: I) -> Self
-    where I: IntoIterator<Item = S>, S: Into<String> {
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
         self.args = args.into_iter().map(Into::into).collect();
         self
     }
     #[must_use]
     pub fn env<K, V>(mut self, k: K, v: V) -> Self
-    where K: Into<String>, V: Into<String> {
+    where
+        K: Into<String>,
+        V: Into<String>,
+    {
         self.env.push((k.into(), v.into()));
         self
     }
@@ -68,7 +81,12 @@ pub struct Supervisor {
 impl Supervisor {
     #[must_use]
     pub fn new(specs: Vec<WorkerSpec>) -> Self {
-        Self { specs, max_restarts: DEFAULT_MAX_RESTARTS, window: DEFAULT_WINDOW, cooldown: DEFAULT_COOLDOWN }
+        Self {
+            specs,
+            max_restarts: DEFAULT_MAX_RESTARTS,
+            window: DEFAULT_WINDOW,
+            cooldown: DEFAULT_COOLDOWN,
+        }
     }
     #[must_use]
     pub fn rate_limit(mut self, max_restarts: u32, window: Duration) -> Self {
@@ -202,7 +220,10 @@ async fn rate_limited(
     restart_times.retain(|t| now.duration_since(*t) < window);
     restart_times.push(now);
     if restart_times.len() as u32 > max_restarts {
-        warn!(restarts = restart_times.len(), "restart rate limit tripped, entering cooldown");
+        warn!(
+            restarts = restart_times.len(),
+            "restart rate limit tripped, entering cooldown"
+        );
         tokio::select! {
             _ = tokio::time::sleep(cooldown) => {}
             _ = drain.wait_for_drain() => {}

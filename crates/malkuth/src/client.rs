@@ -22,20 +22,22 @@ impl Client {
     /// Connect to `addr` over `transport`.
     pub async fn connect(transport: &dyn Transport, addr: &str) -> std::io::Result<Self> {
         let conn = transport.connect(addr).await?;
-        Ok(Self { conn, next_id: AtomicU64::new(1) })
+        Ok(Self {
+            conn,
+            next_id: AtomicU64::new(1),
+        })
     }
 
     /// Wrap an already-established framed connection.
     pub fn from_conn(conn: Box<dyn WireConn>) -> Self {
-        Self { conn, next_id: AtomicU64::new(1) }
+        Self {
+            conn,
+            next_id: AtomicU64::new(1),
+        }
     }
 
     /// Issue a call and await its result.
-    pub async fn call(
-        &mut self,
-        method: &str,
-        params: Value,
-    ) -> Result<Value, RpcError> {
+    pub async fn call(&mut self, method: &str, params: Value) -> Result<Value, RpcError> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let req = Request::call(id, method, params);
         let req_val = serde_json::to_value(&req)

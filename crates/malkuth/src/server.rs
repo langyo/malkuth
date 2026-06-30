@@ -12,7 +12,11 @@ pub struct Server;
 
 impl Server {
     /// Bind `addr` on `transport`, then serve forever.
-    pub async fn serve<H>(transport: &dyn Transport, addr: &str, handler: Arc<H>) -> std::io::Result<()>
+    pub async fn serve<H>(
+        transport: &dyn Transport,
+        addr: &str,
+        handler: Arc<H>,
+    ) -> std::io::Result<()>
     where
         H: RpcHandler + ?Sized + 'static,
     {
@@ -22,7 +26,10 @@ impl Server {
 
     /// Serve on a pre-bound listener (avoids a double bind when you need
     /// [`WireListener::local_addr`] first).
-    pub async fn serve_listener<H>(listener: Box<dyn WireListener>, handler: Arc<H>) -> std::io::Result<()>
+    pub async fn serve_listener<H>(
+        listener: Box<dyn WireListener>,
+        handler: Arc<H>,
+    ) -> std::io::Result<()>
     where
         H: RpcHandler + ?Sized + 'static,
     {
@@ -30,7 +37,9 @@ impl Server {
             match listener.accept().await {
                 Ok(conn) => {
                     let h = handler.clone();
-                    tokio::spawn(async move { serve_conn(conn, h).await; });
+                    tokio::spawn(async move {
+                        serve_conn(conn, h).await;
+                    });
                 }
                 Err(e) => warn!(error = %e, "accept failed"),
             }

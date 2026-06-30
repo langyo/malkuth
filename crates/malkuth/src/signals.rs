@@ -16,22 +16,34 @@ pub struct SignalExitSource;
 #[async_trait]
 impl ExitSource for SignalExitSource {
     async fn wait(&self, ctrl: DrainController) -> ExitReason {
-        use tokio::signal::unix::{signal, SignalKind};
+        use tokio::signal::unix::{SignalKind, signal};
         let mut sigint = match signal(SignalKind::interrupt()) {
             Ok(s) => s,
-            Err(e) => { tracing::warn!(error = %e, "install SIGINT failed"); return ExitReason::graceful(); }
+            Err(e) => {
+                tracing::warn!(error = %e, "install SIGINT failed");
+                return ExitReason::graceful();
+            }
         };
         let mut sigterm = match signal(SignalKind::terminate()) {
             Ok(s) => s,
-            Err(e) => { tracing::warn!(error = %e, "install SIGTERM failed"); return ExitReason::graceful(); }
+            Err(e) => {
+                tracing::warn!(error = %e, "install SIGTERM failed");
+                return ExitReason::graceful();
+            }
         };
         let mut sighup = match signal(SignalKind::hangup()) {
             Ok(s) => s,
-            Err(e) => { tracing::warn!(error = %e, "install SIGHUP failed"); return ExitReason::graceful(); }
+            Err(e) => {
+                tracing::warn!(error = %e, "install SIGHUP failed");
+                return ExitReason::graceful();
+            }
         };
         let mut sigquit = match signal(SignalKind::quit()) {
             Ok(s) => s,
-            Err(e) => { tracing::warn!(error = %e, "install SIGQUIT failed"); return ExitReason::graceful(); }
+            Err(e) => {
+                tracing::warn!(error = %e, "install SIGQUIT failed");
+                return ExitReason::graceful();
+            }
         };
         loop {
             tokio::select! {

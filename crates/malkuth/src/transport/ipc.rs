@@ -5,15 +5,22 @@
 use std::io;
 
 use async_trait::async_trait;
+use interprocess::local_socket::tokio::{
+    Listener as LocalSocketListener, Stream as LocalSocketStream,
+};
 use interprocess::local_socket::traits::tokio::{Listener as _, Stream as _};
-use interprocess::local_socket::tokio::{Listener as LocalSocketListener, Stream as LocalSocketStream};
-use interprocess::local_socket::{GenericFilePath, GenericNamespaced, ListenerOptions, Name, ToFsName, ToNsName};
+use interprocess::local_socket::{
+    GenericFilePath, GenericNamespaced, ListenerOptions, Name, ToFsName, ToNsName,
+};
 use malkuth_core::{Transport, WireConn, WireListener};
 
 use crate::codec::FramedConn;
 
 fn name_err<E: std::fmt::Display>(e: E) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidInput, format!("invalid local-socket name: {e}"))
+    io::Error::new(
+        io::ErrorKind::InvalidInput,
+        format!("invalid local-socket name: {e}"),
+    )
 }
 
 fn to_name(addr: &str) -> io::Result<Name<'_>> {

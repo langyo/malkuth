@@ -24,7 +24,9 @@ impl Default for InMemoryRegistry {
 impl InMemoryRegistry {
     #[must_use]
     pub fn new() -> Self {
-        Self { by_group: Mutex::new(HashMap::new()) }
+        Self {
+            by_group: Mutex::new(HashMap::new()),
+        }
     }
 }
 
@@ -61,7 +63,9 @@ impl InstanceRegistry for InMemoryRegistry {
 
     async fn list(&self, group: &str) -> Result<Vec<InstanceInfo>, RegistryError> {
         let g = self.by_group.lock().map_err(poison)?;
-        Ok(g.get(group).map(|m| m.values().cloned().collect()).unwrap_or_default())
+        Ok(g.get(group)
+            .map(|m| m.values().cloned().collect())
+            .unwrap_or_default())
     }
 }
 
@@ -88,8 +92,12 @@ mod tests {
     #[tokio::test]
     async fn register_list_setrole_deregister() {
         let r = InMemoryRegistry::new();
-        r.register(info("a", "g", InstanceRole::Active)).await.unwrap();
-        r.register(info("b", "g", InstanceRole::Active)).await.unwrap();
+        r.register(info("a", "g", InstanceRole::Active))
+            .await
+            .unwrap();
+        r.register(info("b", "g", InstanceRole::Active))
+            .await
+            .unwrap();
         assert_eq!(r.list("g").await.unwrap().len(), 2);
         r.set_role("a", InstanceRole::Draining).await.unwrap();
         r.deregister("b").await.unwrap();

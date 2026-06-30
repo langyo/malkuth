@@ -112,7 +112,10 @@ impl ProxyState {
     }
 
     fn snapshot(&self) -> Arc<Ring> {
-        self.ring.read().map(|g| Arc::clone(&g)).unwrap_or_else(|_| Arc::new(Ring::default()))
+        self.ring
+            .read()
+            .map(|g| Arc::clone(&g))
+            .unwrap_or_else(|_| Arc::new(Ring::default()))
     }
 
     /// Choose a backend for `client_ip`, preferring the sticky cache and
@@ -128,14 +131,20 @@ impl ProxyState {
         if let Some((addr, _)) = sticky_hit {
             let ring = self.snapshot();
             if ring.backends().iter().any(|b| b.addr == addr) {
-                return Some(Backend { addr, id: String::new() });
+                return Some(Backend {
+                    addr,
+                    id: String::new(),
+                });
             }
         }
         // 2. consistent-hash route.
         let ring = self.snapshot();
         let chosen = ring.route_excluding(client_ip, dead)?;
         if let Ok(mut g) = self.sticky.write() {
-            g.insert(client_ip.to_string(), (chosen.addr, Instant::now() + self.ttl));
+            g.insert(
+                client_ip.to_string(),
+                (chosen.addr, Instant::now() + self.ttl),
+            );
         }
         Some(chosen.clone())
     }
@@ -169,7 +178,11 @@ pub async fn run_proxy(public: SocketAddr, state: Arc<ProxyState>) -> io::Result
     }
 }
 
-async fn handle_client(mut client: TcpStream, peer: SocketAddr, state: Arc<ProxyState>) -> io::Result<()> {
+async fn handle_client(
+    mut client: TcpStream,
+    peer: SocketAddr,
+    state: Arc<ProxyState>,
+) -> io::Result<()> {
     let client_ip = peer.ip().to_string();
     let mut dead: Vec<SocketAddr> = Vec::new();
     // Try backends until one connects; mark failures dead + invalidate sticky.
@@ -210,7 +223,10 @@ mod tests {
     use std::net::{Ipv4Addr, SocketAddrV4};
 
     fn be(id: &str, port: u16) -> Backend {
-        Backend { addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)), id: id.into() }
+        Backend {
+            addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)),
+            id: id.into(),
+        }
     }
 
     #[test]

@@ -17,7 +17,7 @@ use tokio::signal;
 use tracing::{error, info};
 
 use cli::{Args, ProxySpec};
-use pool::{assign_ports, PodManager};
+use pool::{PodManager, assign_ports};
 use proxy::{ProxyState, run_proxy};
 
 #[tokio::main]
@@ -36,14 +36,20 @@ async fn main() {
     }
 
     // Parse proxy spec (if any) and decide the backend port range.
-    let proxy_spec = args.proxy.as_deref().map(|s| ProxySpec::parse(s).unwrap_or_else(|e| {
+    let proxy_spec = args.proxy.as_deref().map(|s| {
+        ProxySpec::parse(s).unwrap_or_else(|e| {
             error!("{e}");
             std::process::exit(2);
-        }));
+        })
+    });
 
     // Assign backend ports to each pod.
     let ports = match &proxy_spec {
-        Some(spec) => assign_ports(spec.backend_ports().collect::<Vec<_>>().into_iter(), args.pod_count, spec.public_port),
+        Some(spec) => assign_ports(
+            spec.backend_ports().collect::<Vec<_>>().into_iter(),
+            args.pod_count,
+            spec.public_port,
+        ),
         None => {
             // No proxy: still allow N pods, but with no port assignment we just
             // run the command N times (ports not managed).
@@ -52,9 +58,8 @@ async fn main() {
     };
 
     // Build proxy state (if a proxy spec was given).
-    let proxy_state = proxy_spec.map(|_spec| {
-        Arc::new(ProxyState::new(Duration::from_secs(args.sticky_ttl_secs)))
-    });
+    let proxy_state = proxy_spec
+        .map(|_spec| Arc::new(ProxyState::new(Duration::from_secs(args.sticky_ttl_secs))));
     if let Some(spec) = proxy_spec {
         info!(
             public = spec.public_port,

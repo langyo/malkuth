@@ -11,8 +11,8 @@
 
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
@@ -138,7 +138,12 @@ impl CoordinationLock for LeaseLock {
                         let _ = write_atomic(&renew_path, &rec);
                     }
                 });
-                return Ok(LeaseGuard { path, owner, stop, handle: Some(handle) });
+                return Ok(LeaseGuard {
+                    path,
+                    owner,
+                    stop,
+                    handle: Some(handle),
+                });
             }
             Err(LockError::Contended(format!(
                 "lease on '{}' held by another live owner",
@@ -165,7 +170,10 @@ fn try_take(path: &Path, owner: &str, ttl: Duration) -> Result<bool, LockError> 
         }
     }
     // Expired or absent — (re)claim it.
-    let rec = LeaseRecord { owner: owner.to_string(), expires_at_ms: now_ms() + ttl.as_millis() as u64 };
+    let rec = LeaseRecord {
+        owner: owner.to_string(),
+        expires_at_ms: now_ms() + ttl.as_millis() as u64,
+    };
     write_atomic(path, &rec)?;
     // Confirm we won the race.
     if let Ok(content) = std::fs::read(path) {
@@ -178,8 +186,8 @@ fn try_take(path: &Path, owner: &str, ttl: Duration) -> Result<bool, LockError> 
 
 /// Atomic write: temp file in the same dir, then rename over the target.
 fn write_atomic(path: &Path, rec: &LeaseRecord) -> Result<(), LockError> {
-    let data = serde_json::to_vec(rec)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let data =
+        serde_json::to_vec(rec).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     let tmp = path.with_extension("tmp");
     std::fs::write(&tmp, &data)?;
     std::fs::rename(&tmp, path)?;
@@ -215,7 +223,8 @@ where
         let _ = tx.send(v);
     });
     Box::pin(async move {
-        rx.recv().unwrap_or_else(|_| panic!("lease worker thread panicked"))
+        rx.recv()
+            .unwrap_or_else(|_| panic!("lease worker thread panicked"))
     })
 }
 
@@ -228,18 +237,32 @@ mod tests {
     async fn acquire_renew_release() {
         let dir = tempdir();
         let lock = LeaseLock::new(&dir);
-        let mut g = lock.acquire("device-a", Duration::from_secs(2)).await.unwrap();
+        let mut g = lock
+            .acquire("device-a", Duration::from_secs(2))
+            .await
+            .unwrap();
         // A second acquirer is contended while the lease is live.
-        let r = tokio::time::timeout(Duration::from_millis(300), lock.acquire("device-a", Duration::from_secs(2))).await;
-        assert!(r.is_err() || r.unwrap().is_err(), "second acquire should be contended");
+        let r = tokio::time::timeout(
+            Duration::from_millis(300),
+            lock.acquire("device-a", Duration::from_secs(2)),
+        )
+        .await;
+        assert!(
+            r.is_err() || r.unwrap().is_err(),
+            "second acquire should be contended"
+        );
         g.release().await;
         // After release, the lease file is gone — a new owner can take it.
-        let g2 = lock.acquire("device-a", Duration::from_secs(2)).await.unwrap();
+        let g2 = lock
+            .acquire("device-a", Duration::from_secs(2))
+            .await
+            .unwrap();
         drop(g2);
     }
 
     fn tempdir() -> PathBuf {
-        let p = std::env::temp_dir().join(format!("malkuth-lease-{}-{}", std::process::id(), now_ms()));
+        let p =
+            std::env::temp_dir().join(format!("malkuth-lease-{}-{}", std::process::id(), now_ms()));
         std::fs::create_dir_all(&p).unwrap();
         p
     }

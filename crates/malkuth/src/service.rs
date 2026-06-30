@@ -10,8 +10,8 @@ use std::time::Duration;
 
 use malkuth_core::{DrainController, DrainHook, ExitSource, Transport, WireListener};
 
-use crate::jsonrpc::RpcHandler;
 use crate::Server;
+use crate::jsonrpc::RpcHandler;
 
 /// A composable supervised service: drain controller + exit source + drain hooks.
 pub struct Supervised {
@@ -95,7 +95,12 @@ impl Supervised {
         Ok(())
     }
 
-    pub async fn serve_rpc<H>(self, transport: &dyn Transport, addr: &str, handler: Arc<H>) -> std::io::Result<()>
+    pub async fn serve_rpc<H>(
+        self,
+        transport: &dyn Transport,
+        addr: &str,
+        handler: Arc<H>,
+    ) -> std::io::Result<()>
     where
         H: RpcHandler + ?Sized + 'static,
     {

@@ -15,21 +15,19 @@
 
 pub mod hooks;
 pub mod lifecycle;
-pub mod transport;
 pub mod traits;
+pub mod transport;
 pub mod types;
 
-#[cfg(all(unix, feature = "file-lock"))]
-pub mod lock;
 #[cfg(feature = "lease")]
 pub mod lease;
+#[cfg(all(unix, feature = "file-lock"))]
+pub mod lock;
 
-pub use hooks::{
-    DrainHook, ExitReason, ExitSource, Heartbeat, HeartbeatReport, ProbeSink,
-};
-pub use lifecycle::{DrainController, ShutdownKind};
-pub use transport::{Transport, WireConn, WireListener};
-pub use traits::{CoordinationLock, InstanceRegistry, LeaderElector, LockError, LockGuard};
+pub use hooks::{DrainHook, ExitReason, ExitSource, Heartbeat, HeartbeatReport, ProbeSink};
 #[cfg(feature = "lease")]
 pub use lease::LeaseLock;
+pub use lifecycle::{DrainController, ShutdownKind};
+pub use traits::{CoordinationLock, InstanceRegistry, LeaderElector, LockError, LockGuard};
+pub use transport::{Transport, WireConn, WireListener};
 pub use types::*;

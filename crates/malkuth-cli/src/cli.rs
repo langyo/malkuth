@@ -80,12 +80,20 @@ impl ProxySpec {
         let (lo_s, hi_s) = range_s
             .split_once('-')
             .ok_or_else(|| format!("backend range must look like LO-HI (got `{range_s}`)"))?;
-        let range_lo: u16 = lo_s.parse().map_err(|_| format!("invalid range lo `{lo_s}`"))?;
-        let range_hi: u16 = hi_s.parse().map_err(|_| format!("invalid range hi `{hi_s}`"))?;
+        let range_lo: u16 = lo_s
+            .parse()
+            .map_err(|_| format!("invalid range lo `{lo_s}`"))?;
+        let range_hi: u16 = hi_s
+            .parse()
+            .map_err(|_| format!("invalid range hi `{hi_s}`"))?;
         if range_hi < range_lo {
             return Err(format!("range hi {range_hi} < lo {range_lo}"));
         }
-        Ok(Self { public_port, range_lo, range_hi })
+        Ok(Self {
+            public_port,
+            range_lo,
+            range_hi,
+        })
     }
 
     /// Iterate candidate backend ports, skipping the public port.

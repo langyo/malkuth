@@ -85,7 +85,10 @@ impl CoordinationLock for FileLock {
                 }
                 return Err(LockError::Io(err));
             }
-            Ok(FileGuard { file: Some(file), path })
+            Ok(FileGuard {
+                file: Some(file),
+                path,
+            })
         })
         .await;
         match result {
