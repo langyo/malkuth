@@ -95,6 +95,7 @@ fn next_owner() -> String {
 impl CoordinationLock for LeaseLock {
     async fn acquire(&self, key: &str, lease: Duration) -> Result<Box<dyn LockGuard>, LockError> {
         let root = self.root.clone();
+        let key_msg = key.to_string();
         let path = root.join(sanitize(key));
         let ttl = lease;
         // Offload the (sleeping) acquire loop to a thread — stays runtime-agnostic.
@@ -131,7 +132,7 @@ impl CoordinationLock for LeaseLock {
                 if Instant::now() >= deadline {
                     return Err(LockError::Contended(format!(
                         "lease on '{}' not acquired within {:?}",
-                        key, ttl
+                        key_msg, ttl
                     )));
                 }
                 let mut waited = Duration::ZERO;
@@ -174,7 +175,8 @@ fn try_take(path: &Path, owner: &str, ttl: Duration) -> Result<bool, LockError> 
 
 /// Atomic write: temp file in the same dir, then rename over the target.
 fn write_atomic(path: &Path, rec: &LeaseRecord) -> Result<(), LockError> {
-    let data = serde_json::to_vec(rec)?;
+    let data = serde_json::to_vec(rec)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     let tmp = path.with_extension("tmp");
     std::fs::write(&tmp, &data)?;
     std::fs::rename(&tmp, path)?;
