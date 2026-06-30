@@ -21,6 +21,8 @@ pub mod types;
 
 #[cfg(all(unix, feature = "file-lock"))]
 pub mod lock;
+#[cfg(feature = "lease")]
+pub mod lease;
 
 pub use hooks::{
     DrainHook, ExitReason, ExitSource, Heartbeat, HeartbeatReport, ProbeSink,
@@ -28,4 +30,6 @@ pub use hooks::{
 pub use lifecycle::{DrainController, ShutdownKind};
 pub use transport::{FramedConn, Transport, WireConn, WireListener, take_frame};
 pub use traits::{CoordinationLock, InstanceRegistry, LeaderElector, LockError, LockGuard};
+#[cfg(feature = "lease")]
+pub use lease::LeaseLock;
 pub use types::*;

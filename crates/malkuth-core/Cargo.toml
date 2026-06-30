@@ -19,6 +19,8 @@ schema = ["dep:schemars"]
 
 # CoordinationLock backend: POSIX advisory flock (unix only).
 file-lock = []
+# CoordinationLock backend: file lease with TTL auto-expiry on crash.
+lease = []
 
 [dependencies]
 serde = { workspace = true }

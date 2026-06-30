@@ -19,10 +19,14 @@ pub mod probes;
 pub mod signals;
 #[cfg(feature = "replica")]
 pub mod registry;
+#[cfg(feature = "leader-follower")]
+pub mod leader;
 
 pub use client::Client;
 pub use jsonrpc::{Id, Request, Response, RpcError, RpcHandler, Router};
 pub use server::Server;
 pub use service::Supervised;
+#[cfg(feature = "leader-follower")]
+pub use leader::LeaseLeaderElector;
 
 pub use malkuth_core;
