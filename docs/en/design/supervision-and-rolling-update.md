@@ -393,3 +393,28 @@ Feature selection per project (`malkuth`):
 *Translation: `docs/zhs/design/supervision-and-rolling-update.md`
 is the Simplified Chinese counterpart. Other languages (zht/ja/ko/fr/es/ru)
 have been translated as well (see `docs/<lang>/design/`).*
+
+---
+
+## Appendix: 0.2 implementation consolidation (SySL)
+
+The 0.2 implementation made two consolidations relative to the original design
+above, both decisions taken for simplicity without changing the architecture's
+trait boundaries:
+
+1. **Tokio-only async layer.** The library is built directly on `tokio`
+   (`tokio::net`, `tokio::process`, `tokio::signal`, `tokio-tungstenite`).
+   Runtime-pluggability (async-std / smol) was dropped: `interprocess`'s async
+   support is tokio-only, `pg_advisory_lock` is tokio-postgres, and tokio is the
+   de-facto Rust executor. The contract layer (`malkuth-core`) remains
+   runtime-light (no hard runtime dependency).
+
+2. **CoordinationLock backends all implemented.** `file-lock` (POSIX `flock`),
+   `lease` (file lease + TTL auto-expiry, the leader-election primitive), and
+   `pg-lock` (`pg_advisory_lock`) are all implemented, as is the `leader-follower`
+   `LeaseLeaderElector` over the lease backend.
+
+The transport abstraction (`Transport` / `WireConn` over `tcp` / `ws` / `ipc`)
+and the pluggable hook traits (`ExitSource`, `ProbeSink`, `Heartbeat`,
+`DrainHook`) are exactly as designed in §3–§5; only the concrete async
+primitives were consolidated onto tokio.

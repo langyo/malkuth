@@ -4,10 +4,9 @@
 
 <img src="../logo.webp" alt="Malkuth" width="200"/>
 
+**Composable service-supervision toolkit for Rust — JSON-RPC over pluggable transports, supervised workers, coordination locks & leader election, plus a watchdog CLI.**
 
-**Infrastructure for long-running programs to self-upgrade and balance load**
-
-[![License](https://img.shields.io/badge/license-BSL--1.1-blue.svg)](../../LICENSE)
+[![License](https://img.shields.io/badge/license-SySL%201.0-blue)](../../LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 [![GitHub](https://img.shields.io/badge/github-celestia--island%2Fmalkuth-blue.svg)](https://github.com/celestia-island/malkuth)
 
@@ -16,85 +15,32 @@
 
 <!-- language switcher is available in the bottom-right corner -->
 
-> **Version 0.1.0** — Early development. Independent and self-contained;
-> depends only on tokio + axum.
+> **Version 0.2.0** — Workspace of three crates, **tokio-based**. The CLI wraps
+> *any* program (even one that does not use the library) with a pod pool and a
+> sticky reverse proxy.
 
-Malkuth helps automated, long-running programs — daemons, agents, servers — do
-two hard things safely:
+Malkuth helps automated, long-running programs do four hard things:
 
-- **Self-upgrade** — roll out a new version (or a freshly compiled build)
-  without dropping in-flight work or connections: zero-downtime rolling updates.
-- **Load balancing** — run multiple instances that share work and coordinate
-  state, where one can retire gracefully while another takes over.
+1. **Pluggable transport** — JSON-RPC over local TCP loopback, remote
+   **WebSocket**, or local **IPC** (Unix sockets / named pipes via
+   [`interprocess`](https://crates.io/crates/interprocess)). One `Transport`
+   trait, dispatched by URL scheme.
+2. **Tokio-based, framework-light** — the JSON-RPC path needs no HTTP framework
+   (axum is optional, for HTTP probes only).
+3. **Optional, hookable facilities** — exit source, probes, heartbeat and drain
+   hooks are *traits*. Use the defaults or supply your own. A batteries-included
+   `Supervised` orchestrator wires them together.
+4. **A watchdog CLI** — `malkuth -- <cmd>` wraps a program with file watching, a
+   pod pool, and an L4 sticky reverse proxy.
 
-## Building blocks
+## Workspace layout
 
-- **Lifecycle** — uniform signal semantics (`SIGTERM` / `SIGINT` = drain,
-  `SIGHUP` = reload, `SIGQUIT` = immediate) via `DrainController`.
-- **Probes** — split `/healthz` (liveness) + `/readyz` (readiness, with a drain
-  bit) so load balancers and orchestrators can route and retire nodes.
-- **Workers** — supervised child-process resources, each a failure-isolation
-  boundary, with OTP-style restart policy and sliding-window rate limiting.
-- **Listener handoff** — socket-activation listener inheritance with a
-  plain-bind fallback, for zero-downtime restarts.
-- **Coordination locks** — a pluggable `CoordinationLock` trait
-  (`file-lock` / `pg-lock` / `lease`) for coordinating concurrent writes or
-  leader election.
-
-## Quick Start
-
-```toml
-[dependencies]
-malkuth = { git = "https://github.com/celestia-island/malkuth.git", branch = "dev" }
-# features: socket-activation, file-lock, lease, pg-lock, replica, leader-follower
-```
-
-```rust
-use malkuth::{acquire_listener, probe_router, ProbeState, DrainController};
-
-#[tokio::main]
-async fn main() -> std::io::Result<()> {
-    // Listener handoff: socket activation, falls back to a plain bind.
-    let listener = acquire_listener("0.0.0.0:8080").await?;
-
-    // Probes + signal-aware drain.
-    let probe = ProbeState::new(env!("CARGO_PKG_VERSION"));
-    let ctrl = DrainController::install();
-
-    let app = axum::Router::new()
-        .merge(probe_router(probe)) // GET /healthz, GET /readyz
-        .with_state(());
-
-    axum::serve(listener, app)
-        .with_graceful_shutdown(async {
-            // Resolves on SIGINT / SIGTERM (drain) or SIGQUIT (immediate),
-            // but NOT on SIGHUP (reload — the server keeps serving).
-            ctrl.wait_for_drain().await;
-        })
-        .await?;
-    Ok(())
-}
-```
-
-## Feature flags
-
-| Feature | Enables |
+| Crate | What it is |
 | --- | --- |
-| `socket-activation` | inherit a listener fd (socket activation) |
-| `file-lock` | POSIX `flock` `CoordinationLock` backend |
-| `lease` | lease-based file lock with TTL auto-expiry |
-| `pg-lock` | PostgreSQL `pg_advisory_lock` backend (staged) |
-| `replica` | `InstanceRegistry` trait (load-balancing / rolling update) |
-| `leader-follower` | `LeaderElector` trait (active-passive HA) |
+| **`malkuth-core`** | Runtime-light **contracts**: wire types + traits. `serde` + `event-listener` + `async-trait` only. |
+| **`malkuth`** | Tokio **implementations**: JSON-RPC codec/server/client, transports (tcp/ws/ipc), workers, probes, signals, lock backends (file/lease/pg), leader election. |
+| **`malkuth-cli`** | The `malkuth` binary — pod pool + file watcher + sticky reverse proxy. |
 
-## Status
-
-Lifecycle + probes, supervised workers, listener handoff and the
-coordination-lock trait with the `file-lock` backend are implemented. The
-`replica` / `leader-follower` strategy backends are trait contracts with full
-implementations staged. See [docs/design/](./design/) for the design.
-
-## License
-
-Business Source License 1.1 (BSL-1.1); automatically converts to your choice
-of Apache-2.0 or MIT on 2030-01-01. See [LICENSE](../../LICENSE).
+See the [root README](../../README.md) for the full feature matrix and the CLI
+usage, and [Design](./design/supervision-and-rolling-update.md) for the
+architecture.

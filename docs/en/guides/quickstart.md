@@ -1,73 +1,75 @@
 # Quick Start
 
-## Add malkuth to your project
+> **0.2 API.** Malkuth is now a tokio-based workspace (`malkuth-core` contracts +
+> `malkuth` implementations + `malkuth-cli`). This guide shows the library and
+> the CLI.
+
+## Add the dependency
 
 ```toml
 [dependencies]
 malkuth = { git = "https://github.com/celestia-island/malkuth.git", branch = "dev" }
-# Optional features:
-#   socket-activation  — inherit a listener fd from systemd
-#   file-lock          — POSIX flock coordination-lock backend
-#   lease              — lease-based file lock with TTL auto-expiry (staged)
-#   pg-lock            — PostgreSQL advisory lock (staged)
-#   replica            — InstanceRegistry trait (load-balancing)
-#   leader-follower    — LeaderElector trait (active-passive HA)
+# features: tcp (default) | ws | ipc | signals (default) | worker | axum-probe |
+#           file-lock | lease | pg-lock | replica | leader-follower
 ```
 
-## Minimal server with graceful shutdown and probes
+## A minimal JSON-RPC service
 
 ```rust
-use malkuth::{acquire_listener, probe_router, ProbeState, DrainController};
+use std::sync::Arc;
+use malkuth::{Router, Server, Supervised};
+use malkuth::transport::TcpTransport;
+use malkuth_core::Transport;
+use serde_json::json;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    // 1. Acquire a listener — prefers systemd socket activation,
-    //    falls back to binding the given address.
-    let listener = acquire_listener("0.0.0.0:8080").await?;
+    let lis = TcpTransport.listen("tcp://127.0.0.1:0").await?;
+    let supervised = Supervised::new().signals();
+    let ctrl = supervised.drain_controller();
 
-    // 2. Create probe state and install the drain controller.
-    let probe = ProbeState::new(env!("CARGO_PKG_VERSION"));
-    let ctrl = DrainController::install();
+    let handler = Arc::new(
+        Router::new()
+            .lifecycle(ctrl, None)            // Lifecycle.Drain / Status / Health / Reload
+            .route("ping", |_| Box::pin(async { Ok(json!("pong")) })),
+    );
 
-    // 3. Build your router, merging the probe routes.
-    let app = axum::Router::new()
-        .route("/", axum::routing::get(|| async { "hello" }))
-        .merge(probe_router(probe))
-        .with_state(());
-
-    // 4. Serve with graceful shutdown: SIGINT/SIGTERM trigger drain,
-    //    SIGQUIT forces immediate exit, SIGHUP reloads (keeps serving).
-    axum::serve(listener, app)
-        .with_graceful_shutdown(async {
-            ctrl.wait_for_drain().await;
-        })
-        .await?;
-    Ok(())
+    supervised.serve_rpc_listener(lis, handler).await
 }
 ```
 
-## What you get
+- `Router::lifecycle` registers the standard lifecycle methods on a shared
+  `DrainController` (+ optional `ProbeSink`).
+- `Supervised` races the server against the OS-signal exit source, then runs any
+  registered drain hooks. Replace `.signals()` with `.exit(your_impl)` to trigger
+  drain from your own logic.
 
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /healthz` | Liveness — "the process is alive" (pid, uptime, version) |
-| `GET /readyz` | Readiness — "can serve" (returns 503 while draining) |
+## Call it from a client
 
-| Signal | Behaviour |
-| --- | --- |
-| `SIGINT` / `SIGTERM` | Graceful drain (finish in-flight, then exit) |
-| `SIGHUP` | Hot reload (does **not** exit — server keeps serving) |
-| `SIGQUIT` | Immediate exit (emergency only) |
+```rust
+use malkuth::{Client};
+use malkuth::transport::TcpTransport;
+use malkuth_core::Transport;
+use serde_json::json;
 
-## Feature flags
+let mut c = Client::connect(&TcpTransport, "tcp://127.0.0.1:8080").await?;
+let r = c.call("ping", json!({})).await?;       // → "pong"
+c.notify("Lifecycle.Drain", json!({})).await?;  // → server begins graceful drain
+```
 
-| Feature | What it enables |
-| --- | --- |
-| `socket-activation` | Inherit a listener fd from systemd (zero-downtime restart) |
-| `file-lock` | POSIX `flock`-based `CoordinationLock` backend (Unix only) |
-| `lease` | Lease-based file lock with TTL auto-expiry on crash (staged) |
-| `pg-lock` | PostgreSQL advisory lock backend (staged) |
-| `replica` | `InstanceRegistry` trait for load-balanced replicas |
-| `leader-follower` | `LeaderElector` trait for active-passive HA |
+## Other transports
 
-All features are opt-in; the default build has no unsafe code and depends only on tokio + axum.
+Swap `TcpTransport` for `WsTransport` (feature `ws`, address `ws://host/path`)
+or `IpcTransport` (feature `ipc`, address `ipc:/tmp/sock`); the server/client are
+transport-agnostic. Or use `MultiTransport`, which dispatches by URL scheme.
+
+## Wrap a program that does not use the library (the CLI)
+
+```bash
+malkuth --watch ./src --proxy 3000:3000-3999 --pod-count 3 -- cargo run
+```
+
+This runs 3 pods (self-assigning ports 3001–3003 via the `PORT` env var),
+probes each until it is listening, and fronts them with a sticky reverse proxy on
+3000 (consistent-hash routing by client IP). A change under `./src` triggers a
+rolling restart, one pod at a time. See `malkuth --help` for all flags.
