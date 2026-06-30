@@ -12,22 +12,15 @@ repository.workspace = true
 name = "malkuth"
 path = "src/main.rs"
 
-[features]
-default = ["full"]
-full = []
-
 [dependencies]
 malkuth-core = { workspace = true }
-clap = { workspace = true, features = ["derive"] }
+clap = { workspace = true }
 tokio = { workspace = true }
-tokio-util = { workspace = true }
 notify = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
-async-net = { workspace = true }
-futures-util = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }
 
