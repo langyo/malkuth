@@ -14,10 +14,7 @@
 </div>
 <!-- markdownlint-enable MD033 MD041 MD036 -->
 
-**[English](./intro.md)** &bull; **[简体中文](../zhs/intro.md)** &bull;
-**[繁體中文](../zht/intro.md)** &bull; **[日本語](../ja/intro.md)** &bull;
-**[한국어](../ko/intro.md)** &bull; **[Français](../fr/intro.md)** &bull;
-**[Español](../es/intro.md)** &bull; **[Русский](../ru/intro.md)**
+<!-- language switcher is available in the bottom-right corner -->
 
 > **Version 0.1.0** — Early development. Independent and self-contained;
 > depends only on tokio + axum.
