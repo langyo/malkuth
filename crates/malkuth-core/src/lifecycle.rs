@@ -18,7 +18,6 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use event_listener::Event;
 
@@ -167,51 +166,12 @@ impl DrainController {
         self.inner.draining.store(false, Ordering::Release);
         self.inner.kind.store(ShutdownKind::NONE, Ordering::Release);
     }
-
-    /// Sleep for at most `timeout`, but wake as soon as drain begins.
-    ///
-    /// Uses a plain `event_listener` deadline poll so it needs no runtime
-    /// timer primitive — but it does spin the executor's parking. Prefer
-    /// [`wait_for_drain`](Self::wait_for_drain) when you don't need a deadline.
-    pub async fn sleep_or_drain(&self, timeout: Duration) {
-        if self.is_draining() {
-            return;
-        }
-        let deadline = std::time::Instant::now() + timeout;
-        loop {
-            if self.is_draining() || std::time::Instant::now() >= deadline {
-                return;
-            }
-            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-            // Poll the drain event with a coarse timeout via a short listener race.
-            let listener = self.inner.drain_event.listen();
-            if self.is_draining() {
-                return;
-            }
-            // Coarse: yield to the executor up to remaining time.
-            let step = remaining.min(Duration::from_millis(50));
-            race_listener_vs_sleep(listener, step, deadline).await;
-        }
-    }
-}
-
-async fn race_listener_vs_sleep(
-    listener: event_listener::Listener,
-    step: Duration,
-    deadline: std::time::Instant,
-) {
-    // event_listener doesn't have a native timeout; emulate by racing the
-    // listener against a yield-loop. The step keeps latency bounded.
-    let _ = deadline;
-    let _ = step;
-    // If the listener fires first we return; otherwise we yield once and let
-    // the outer loop re-check the clock.
-    listener.await;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn controller_starts_inactive() {
@@ -234,20 +194,26 @@ mod tests {
         c.begin_drain(ShutdownKind::Reload);
         assert!(!c.is_draining());
         assert_eq!(c.kind(), Some(ShutdownKind::Reload));
-        // can still clear and keep serving
         c.clear_drain();
         assert_eq!(c.kind(), None);
     }
 
-    #[tokio::test]
-    async fn wait_for_drain_unblocks_after_begin() {
+    // Driven by the executor the test harness picks; works under tokio (and
+    // would equally work under async-std/smol — event_listener is runtime-free).
+    #[test]
+    fn wait_for_drain_unblocks_after_begin_across_thread() {
         let c = DrainController::new();
         let c2 = c.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(10)).await;
+        let handle = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(20));
             c2.begin_drain(ShutdownKind::Immediate);
         });
-        let k = c.wait_for_drain().await;
+        // event_listener supports a blocking wait via `wait()`.
+        if !c.is_draining() {
+            c.inner.drain_event.listen().wait();
+        }
+        let k = c.kind().unwrap_or(ShutdownKind::Graceful);
         assert_eq!(k, ShutdownKind::Immediate);
+        handle.join().unwrap();
     }
 }

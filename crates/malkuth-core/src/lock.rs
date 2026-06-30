@@ -79,7 +79,7 @@ impl CoordinationLock for FileLock {
                 // EAGAIN / EWOULDBLOCK ⇒ contended; anything else ⇒ io error.
                 if matches!(err.raw_os_error(), Some(libc::EAGAIN) | Some(libc::EWOULDBLOCK)) {
                     return Err(LockError::Contended(format!(
-                        "flock on '{key_short}' is held by another live process"
+                        "flock on '{key}' is held by another live process"
                     )));
                 }
                 return Err(LockError::Io(err));
