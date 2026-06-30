@@ -1,7 +1,7 @@
 <!-- markdownlint-disable MD033 MD041 MD036 -->
 <div align="center">
 
-<img src="docs/logo.webp" alt="Malkuth" width="200"/>
+<img src="../logo.webp" alt="Malkuth" width="200"/>
 
 # Malkuth
 
