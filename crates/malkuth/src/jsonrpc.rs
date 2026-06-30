@@ -202,6 +202,76 @@ impl RpcHandler for Router {
     }
 }
 
+// ── standard lifecycle method registration ─────────────────────
+
+use malkuth_core::{methods, DrainController, DrainResponse, HealthStatus, ProbeSink, ReadyStatus, ShutdownKind};
+
+impl Router {
+    /// Register the standard lifecycle RPC methods (`Lifecycle.Drain`,
+    /// `Lifecycle.Reload`, `Lifecycle.Status`, `Lifecycle.Health`) wired to a
+    /// shared [`DrainController`] and an optional [`ProbeSink`].
+    ///
+    /// `Lifecycle.Drain` begins a graceful drain; `Lifecycle.Status` /
+    /// `Lifecycle.Health` reflect the probe (or a minimal default when `probe`
+    /// is `None`). Chain further `.route(...)` calls after this.
+    #[must_use]
+    pub fn lifecycle(
+        self,
+        drain: DrainController,
+        probe: Option<std::sync::Arc<dyn ProbeSink>>,
+    ) -> Self {
+        let drain_for_rpc = drain.clone();
+        let router = self.route(methods::DRAIN, move |_params| {
+            let d = drain_for_rpc.clone();
+            Box::pin(async move {
+                d.begin_drain(ShutdownKind::Graceful);
+                Ok(serde_json::to_value(DrainResponse { accepted: true, draining: true }).unwrap())
+            })
+        });
+        let drain_for_reload = drain.clone();
+        let router = router.route(methods::RELOAD, move |_params| {
+            let d = drain_for_reload.clone();
+            Box::pin(async move {
+                d.begin_drain(ShutdownKind::Reload);
+                Ok(serde_json::Value::Null)
+            })
+        });
+        let probe_for_status = probe.clone();
+        let drain_for_status = drain.clone();
+        let router = router.route(methods::STATUS, move |_params| {
+            let p = probe_for_status.clone();
+            let d = drain_for_status.clone();
+            Box::pin(async move {
+                let status = match &p {
+                    Some(p) => p.ready().await,
+                    None => {
+                        let draining = d.is_draining();
+                        ReadyStatus { ready: !draining, draining, dependencies: Vec::new(), generation: None }
+                    }
+                };
+                Ok(serde_json::to_value(status).unwrap())
+            })
+        });
+        let probe_for_health = probe.clone();
+        router.route(methods::HEALTH, move |_params| {
+            let p = probe_for_health.clone();
+            Box::pin(async move {
+                let health = match &p {
+                    Some(p) => p.health().await,
+                    None => HealthStatus {
+                        alive: true,
+                        pid: std::process::id(),
+                        uptime_secs: 0,
+                        version: "unknown".to_string(),
+                    },
+                };
+                Ok(serde_json::to_value(health).unwrap())
+            })
+        })
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;

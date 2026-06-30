@@ -8,6 +8,7 @@
 pub mod client;
 pub mod jsonrpc;
 pub mod server;
+pub mod service;
 pub mod transport;
 
 #[cfg(feature = "worker")]
@@ -22,5 +23,6 @@ pub mod registry;
 pub use client::Client;
 pub use jsonrpc::{Id, Request, Response, RpcError, RpcHandler, Router};
 pub use server::Server;
+pub use service::Supervised;
 
 pub use malkuth_core;
