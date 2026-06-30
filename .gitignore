@@ -6,7 +6,3 @@ Cargo.lock
 .DS_Store
 __pycache__/
 *.pyc
-crates/malkuth/src/client.rs
-crates/malkuth/src/jsonrpc.rs
-crates/malkuth/src/server.rs
-crates/malkuth/src/transport/
