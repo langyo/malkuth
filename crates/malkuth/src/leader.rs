@@ -131,7 +131,6 @@ mod tests {
         assert!(r.is_err() || !r.unwrap().unwrap(), "B should not become leader while A holds");
         assert_eq!(a.current().await.unwrap().unwrap().leader_instance_id, "leader-A");
         a.resign().await.unwrap();
-        eprintln!("DEBUG files in dir after resign: {:?}", std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).map(|e| e.path()).collect::<Vec<_>>());
         // Now B can take over.
         assert!(b.try_acquire(Duration::from_secs(2)).await.unwrap());
         assert_eq!(b.current().await.unwrap().unwrap().leader_instance_id, "leader-B");

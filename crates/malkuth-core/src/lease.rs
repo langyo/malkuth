@@ -70,6 +70,15 @@ impl Drop for LeaseGuard {
         if let Some(h) = self.handle.take() {
             let _ = h.join();
         }
+        // Clean up the lease file if we still own it (covers abandoned/panicked
+        // guards, not just an explicit release()).
+        if let Ok(content) = std::fs::read(&self.path) {
+            if let Ok(rec) = serde_json::from_slice::<LeaseRecord>(&content) {
+                if rec.owner == self.owner {
+                    let _ = std::fs::remove_file(&self.path);
+                }
+            }
+        }
     }
 }
 
