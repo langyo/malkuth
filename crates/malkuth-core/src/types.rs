@@ -6,20 +6,6 @@
 
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "schema")]
-use schemars::JsonSchema;
-
-// When the `schema` feature is on, every wire type also derives `JsonSchema`.
-#[cfg(feature = "schema")]
-macro_rules! schema { () => { derive(JsonSchema) }; }
-#[cfg(not(feature = "schema"))]
-macro_rules! schema { () => {} };
-use schema;
-
-/// The full set of derives every wire type carries (JsonSchema added by feature).
-#[allow(unused_macros)]
-macro_rules! wire_derive { () => { derive(Debug, Clone, Serialize, Deserialize) }; }
-
 // ═══════════════════════════════════════════════════════════════
 // JSON-RPC method names
 // ═══════════════════════════════════════════════════════════════
@@ -44,7 +30,7 @@ pub mod methods {
 
 /// High-level lifecycle state of an instance, observable over the wire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", schema!())]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum DrainState {
     #[default]
@@ -59,7 +45,7 @@ pub enum DrainState {
 
 /// Result of one dependency check reported by `/readyz`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", schema!())]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct DependencyCheck {
     pub name: String,
     pub ok: bool,
@@ -71,7 +57,7 @@ pub struct DependencyCheck {
 /// the central rolling-update signal: route new traffic only to instances whose
 /// `ready && !draining`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", schema!())]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ReadyStatus {
     pub ready: bool,
     pub draining: bool,
@@ -83,7 +69,7 @@ pub struct ReadyStatus {
 
 /// Liveness probe payload — the body of `GET /healthz`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", schema!())]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct HealthStatus {
     pub alive: bool,
     pub pid: u32,
@@ -97,7 +83,7 @@ pub struct HealthStatus {
 
 /// Role of an instance within its group.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", schema!())]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum InstanceRole {
     Active,
@@ -106,7 +92,7 @@ pub enum InstanceRole {
 
 /// One entry in the shared instance registry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", schema!())]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct InstanceInfo {
     pub instance_id: String,
     pub group: String,
@@ -125,7 +111,7 @@ pub struct InstanceInfo {
 
 /// Leader/follower role for Subsystem B (active-passive HA).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", schema!())]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum LeaderRole {
     Leader,
@@ -134,7 +120,7 @@ pub enum LeaderRole {
 
 /// Announcement of a lease acquisition or transfer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", schema!())]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct LeaderAnnounce {
     pub node_id: String,
     pub leader_instance_id: String,
@@ -149,7 +135,7 @@ pub struct LeaderAnnounce {
 
 /// Lifecycle state of one supervised worker process.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", schema!())]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum WorkerStatus {
     Starting,
@@ -160,7 +146,7 @@ pub enum WorkerStatus {
 
 /// When to restart a worker after it exits (OTP vocabulary).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", schema!())]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum RestartPolicy {
     #[default]
@@ -171,7 +157,7 @@ pub enum RestartPolicy {
 
 /// Snapshot of one worker, reported over `Worker.Status`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", schema!())]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct WorkerInfo {
     pub id: String,
     pub kind: String,
@@ -189,7 +175,7 @@ pub struct WorkerInfo {
 
 /// Body of `Lifecycle.Drain`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", schema!())]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct DrainRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_secs: Option<u32>,
@@ -199,7 +185,7 @@ pub struct DrainRequest {
 
 /// Reply to `Lifecycle.Drain`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", schema!())]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct DrainResponse {
     pub accepted: bool,
     pub draining: bool,
@@ -207,7 +193,7 @@ pub struct DrainResponse {
 
 /// Body of `Lifecycle.Heartbeat`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", schema!())]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct HeartbeatBeat {
     pub instance_id: String,
     pub group: String,
