@@ -224,8 +224,7 @@ async fn rolling(pods_n: usize, port_base: u16) {
 
     // gradual update: bring up each gen-1 pod, then drain the matching gen-0 pod
     let mut gen1: Vec<Pod> = Vec::new();
-    for i in 0..pods_n {
-        let p1 = gen1_ports[i];
+    for (i, &p1) in gen1_ports.iter().enumerate() {
         gen1.push(spawn_pod(&exe, p1, 1));
         if !wait_healthy(p1, Duration::from_secs(10)).await {
             eprintln!("ROLLING_FAIL gen1 port={p1} not healthy");
