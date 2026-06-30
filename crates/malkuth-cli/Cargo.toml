@@ -17,7 +17,7 @@ default = ["full"]
 full = ["malkuth/tcp", "malkuth/signals", "malkuth/worker"]
 
 [dependencies]
-malkuth = { path = "../malkuth", version = "0.2.0" }
+malkuth.workspace = true
 malkuth-core = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 tokio = { workspace = true }
