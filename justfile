@@ -3,7 +3,7 @@
 set shell := ["bash", "-c"]
 python_cmd := if os_family() == "windows" {
     "python"
-} else if which("python3") != "" {
+} else if command -v python3 >/dev/null 2>&1 {
     "python3"
 } else {
     "python"

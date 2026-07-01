@@ -19,9 +19,9 @@
 **[Español](docs/es/README.md)** &bull; **[Русский](docs/ru/README.md)** &bull;
 **[العربية](docs/ar/README.md)**
 
-> **Version 0.1.0** — Workspace of three crates, **tokio-based**. The CLI wraps
-> *any* program (even one that does not use the library) with a pod pool and a
-> sticky reverse proxy.
+> **Version 0.1.0** — Single crate, **tokio-based**. The CLI wraps *any* program
+> (even one that does not use the library) with a pod pool and a sticky reverse
+> proxy.
 
 Malkuth helps automated, long-running programs do four hard things:
 
@@ -38,14 +38,6 @@ Malkuth helps automated, long-running programs do four hard things:
    them together.
 4. **A watchdog CLI** — `malkuth -- <cmd>` wraps a program with file watching, a
    pod pool, and an L4 sticky reverse proxy.
-
-## Workspace layout
-
-| Crate | What it is |
-| --- | --- |
-| **`malkuth-core`** | Runtime-light **contracts**: wire types + traits (`Transport`, `WireConn`, `CoordinationLock`, `ExitSource`, `ProbeSink`, `Heartbeat`, `DrainHook`, `LeaderElector`, `InstanceRegistry`). Depends only on `serde` + `event-listener` + `async-trait`. |
-| **`malkuth`** | Tokio **implementations**: JSON-RPC codec, server/client, transports (tcp/ws/ipc), supervised workers, probes, signals, coordination-lock backends (file/lease/pg), lease-based leader election. |
-| **`malkuth-cli`** | The `malkuth` binary — pod pool + file watcher + sticky reverse proxy. |
 
 ## The CLI (wraps anything)
 
@@ -71,16 +63,15 @@ restarts one pod at a time.
 
 ```toml
 [dependencies]
-malkuth = { git = "https://github.com/celestia-island/malkuth.git", branch = "dev" }
-# features: tcp (default) | ws | ipc | signals (default) | worker | axum-probe |
-#           file-lock | lease | pg-lock | replica | leader-follower
+malkuth = "0.1"
+# features: tcp (default) | ws | ipc | signals (default) | worker | probes |
+#           file-lock | lease | pg-lock | replica | leader-follower | schema | cli
 ```
 
 ```rust
 use std::sync::Arc;
-use malkuth::{Client, Router, Server, Supervised};
+use malkuth::{Client, Router, Server, Supervised, Transport};
 use malkuth::transport::TcpTransport;
-use malkuth_core::Transport;
 use serde_json::json;
 
 #[tokio::main]
@@ -100,10 +91,10 @@ async fn main() -> std::io::Result<()> {
 ```
 
 Need drain triggered by your own logic instead of signals? Implement
-`malkuth_core::ExitSource` and pass it via `.exit(...)`. Want Postgres-backed
-coordination? `PgLock::new(Arc::new(client))` implements `CoordinationLock`.
+`malkuth::ExitSource` and pass it via `.exit(...)`. Want Postgres-backed
+coordination? The `pg-lock` feature provides a `CoordinationLock` backend.
 
-## Feature flags (`malkuth`)
+## Feature flags
 
 | Feature | Enables |
 | --- | --- |
@@ -112,12 +103,14 @@ coordination? `PgLock::new(Arc::new(client))` implements `CoordinationLock`.
 | `ipc` | JSON-RPC over local IPC (`interprocess`) |
 | `signals` *(default)* | Default OS-signal `ExitSource` (`tokio::signal`) |
 | `worker` | Supervised child-process workers (`tokio::process`) |
-| `axum-probe` | axum `/healthz` + `/readyz` router |
+| `probes` | axum `/healthz` + `/readyz` router |
 | `file-lock` | POSIX `flock` `CoordinationLock` backend (unix) |
-| `lease` | File-lease `CoordinationLock` with TTL auto-expiry (crash-safe) |
+| `lease` | File-lease `CoordinationLock` with TTL auto-exppiry (crash-safe) |
 | `pg-lock` | PostgreSQL `pg_advisory_lock` backend (`tokio-postgres`) |
 | `replica` | In-memory `InstanceRegistry` |
-| `leader-follower` | `LeaseLeaderElector` (Subsystem B, over the lease backend) |
+| `leader-follower` | `LeaseLeaderElector` (over the lease backend) |
+| `schema` | `schemars::JsonSchema` derives for wire types |
+| `cli` | The `malkuth` watchdog binary (pod pool + sticky proxy) |
 
 ## Status
 
