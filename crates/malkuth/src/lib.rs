@@ -66,7 +66,7 @@ pub use traits::{CoordinationLock, InstanceRegistry, LeaderElector, LockError, L
 pub use types::*;
 pub use wire::{Transport, WireConn, WireListener};
 
-pub use client::Client;
+pub use client::{Client, ClientPool};
 pub use server::Server;
 pub use service::Supervised;
 
