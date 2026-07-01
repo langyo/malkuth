@@ -1,71 +1,94 @@
 # クイックスタート
 
-## malkuth をプロジェクトに追加する
+## 依存関係の追加
 
 ```toml
 [dependencies]
 malkuth = { git = "https://github.com/celestia-island/malkuth.git", branch = "dev" }
-# Optional features:
-#   socket-activation  — inherit a listener fd from systemd
-#   file-lock          — POSIX flock coordination-lock backend
-#   lease              — lease-based file lock with TTL auto-expiry
-#   replica            — InstanceRegistry trait (load-balancing)
-#   leader-follower    — LeaderElector trait (active-passive HA)
+# features: tcp (default) | ws | ipc | signals (default) | worker | probes |
+#           file-lock | lease | pg-lock | replica | leader-follower | schema
 ```
 
-## グレースフルシャットダウンとプローブを備えた最小サーバー
+## 最小の JSON-RPC サービス
 
 ```rust
-use malkuth::{acquire_listener, probe_router, ProbeState, DrainController};
+use std::sync::Arc;
+use malkuth::{Router, Supervised};
+use malkuth::transport::TcpTransport;
+use malkuth::Transport;
+use serde_json::json;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    // 1. Acquire a listener — prefers systemd socket activation,
-    //    falls back to binding the given address.
-    let listener = acquire_listener("0.0.0.0:8080").await?;
+    let lis = TcpTransport.listen("tcp://127.0.0.1:0").await?;
+    let supervised = Supervised::new().signals();
+    let ctrl = supervised.drain_controller();
 
-    // 2. Create probe state and install the drain controller.
-    let probe = ProbeState::new(env!("CARGO_PKG_VERSION"));
-    let ctrl = DrainController::install();
+    let handler = Arc::new(
+        Router::new()
+            .lifecycle(ctrl, None)            // registers Lifecycle.Drain / Status / Health / Reload
+            .route("ping", |_| Box::pin(async { Ok(json!("pong")) })),
+    );
 
-    // 3. Build your router, merging the probe routes.
-    let app = axum::Router::new()
-        .route("/", axum::routing::get(|| async { "hello" }))
-        .merge(probe_router(probe))
-        .with_state(());
-
-    // 4. Serve with graceful shutdown: SIGINT/SIGTERM trigger drain,
-    //    SIGQUIT forces immediate exit, SIGHUP reloads (keeps serving).
-    axum::serve(listener, app)
-        .with_graceful_shutdown(async {
-            ctrl.wait_for_drain().await;
-        })
-        .await?;
-    Ok(())
+    supervised.serve_rpc_listener(lis, handler).await
 }
 ```
 
-## 利用できる機能
+`Supervised` は JSON-RPC サーバーを OS シグナルの終了ソース
+（SIGINT/SIGTERM → ドレイン、SIGHUP → リロード、SIGQUIT → 即時終了）と競争させ、
+その後、登録されたドレインフックを実行します。`.signals()` を `.exit(your_impl)`
+に差し替えると、独自のロジックからドレインをトリガーできます。
 
-| エンドポイント | 目的 |
-| --- | --- |
-| `GET /healthz` | ライブネス —「プロセスは生きている」（pid、稼働時間、バージョン） |
-| `GET /readyz` | レディネス —「サービス可能」（ドレイン中は 503 を返す） |
+## クライアントからの呼び出し
 
-| シグナル | 挙動 |
-| --- | --- |
-| `SIGINT` / `SIGTERM` | グレースフルドレイン（処理中のリクエストを完了してから終了） |
-| `SIGHUP` | ホットリロード（終了**しない** — サーバーはサービスを継続） |
-| `SIGQUIT` | 即時終了（緊急時のみ） |
+```rust
+use malkuth::Client;
+use malkuth::transport::TcpTransport;
+use malkuth::Transport;
+use serde_json::json;
 
-## フィーチャーフラグ
+let mut c = Client::connect(&TcpTransport, "tcp://127.0.0.1:8080").await?;
 
-| フィーチャー | 有効化される機能 |
-| --- | --- |
-| `socket-activation` | systemd からリスナー fd を継承（ダウンタイムゼロの再起動） |
-| `file-lock` | POSIX `flock` ベースの `CoordinationLock` バックエンド |
-| `lease` | クラッシュ時に TTL で自動失効するリースベースのファイルロック |
-| `replica` | ロードバランシング用レプリカのための `InstanceRegistry` トレイト |
-| `leader-follower` | アクティブ・パッシブ HA 用の `LeaderElector` トレイト |
+// Custom method:
+let r = c.call("ping", json!({})).await?;       // → "pong"
 
-すべてのフィーチャーはオプトインです。デフォルトビルドには unsafe コードが一切なく、tokio + axum にのみ依存します。
+// Standard lifecycle methods (registered by Router::lifecycle):
+c.notify("Lifecycle.Drain", json!({})).await?;  // → server begins graceful drain
+let health = c.call("Lifecycle.Health", json!({})).await?;
+// → { "alive": true, "pid": 12345, "uptime_secs": 360, "version": "0.2.0" }
+let status = c.call("Lifecycle.Status", json!({})).await?;
+// → { "ready": true, "draining": false, "dependencies": [], "generation": null }
+```
+
+## JSON-RPC ライフサイクルプロトコル
+
+`Router::lifecycle(drain, probe)` は 4 つの標準メソッドを登録します：
+
+| メソッド | パラメータ | 結果 | 効果 |
+| --- | --- | --- | --- |
+| `Lifecycle.Drain` | `{}` | `{ "accepted": true, "draining": true }` | グレースフルドレインを開始 |
+| `Lifecycle.Reload` | `{}` | `null` | リロードを開始（終了しない） |
+| `Lifecycle.Status` | `{}` | `ReadyStatus` | レディ状態を照会（ドレインビット + 依存関係） |
+| `Lifecycle.Health` | `{}` | `HealthStatus` | ライブ状態を照会（pid / アップタイム / バージョン） |
+
+すべてのメッセージは、選択したトランスポート上で NDJSON フレーム化された
+JSON-RPC 2.0 で送られます。
+
+## その他のトランスポート
+
+`TcpTransport` を `WsTransport`（feature `ws`、アドレス `ws://host:port`）や
+`IpcTransport`（feature `ipc`、アドレス `ipc:/tmp/sock`）に差し替えられます。
+あるいは URL スキーム（`tcp://` / `ws://` / `ipc:`）でディスパッチする
+`MultiTransport` を使います。
+
+## CLI で任意のプログラムをラップ
+
+```bash
+malkuth --watch ./src --proxy 3000:3000-3999 --pod-count 3 -- cargo run
+```
+
+これは 3 つのポッドを実行し（`PORT` 環境変数でポート 3001〜3003 を自己割り当て）、
+各ポッドがリッスンを開始するまでプローブし、ポート 3000 でスティッキーな
+リバースプロキシを前面に置きます（クライアント IP による一貫性ハッシュルーティング）。
+`./src` 配下の変更がローリングリスタートをトリガーし、一度に 1 つのポッドずつ
+再起動します。

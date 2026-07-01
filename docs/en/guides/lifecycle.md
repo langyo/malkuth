@@ -2,49 +2,41 @@
 
 ## The problem
 
-Most Rust servers only catch `ctrl_c` (SIGINT). But `docker stop`, `systemctl restart`,
-and Kubernetes pod termination send **SIGTERM** — which bypasses your graceful shutdown
-and kills in-flight requests.
+Most Rust servers only catch `ctrl_c` (SIGINT). But `docker stop`,
+`systemctl restart`, and Kubernetes pod termination send **SIGTERM** — which
+bypasses graceful shutdown and kills in-flight requests after the grace period.
 
-## The solution: `DrainController`
+## `DrainController`
 
-`DrainController::install()` sets up canonical signal handlers following the
-nginx/Go convention:
-
-| Signal | Meaning | Drains? |
-| --- | --- | --- |
-| `SIGINT` / `SIGTERM` | Graceful shutdown | Yes |
-| `SIGHUP` | Hot config reload | No (server keeps serving) |
-| `SIGQUIT` | Immediate exit | Yes (skip drain) |
-
-## Usage
+`DrainController` holds a shared drain flag and lets any task wait for it.
+It is built on `tokio::sync::Notify` + atomics.
 
 ```rust
-use malkuth::DrainController;
+use malkuth::{DrainController, ShutdownKind};
 
-let ctrl = DrainController::install();
-
-// Pass clones to whoever needs to observe drain:
-// - the serve loop (to stop accepting)
-// - the probe layer (to set the /readyz draining bit)
-// - background tasks (to wind down)
-
-// Block until a drain/immediate signal fires.
-let kind = ctrl.wait_for_drain().await;
+let ctrl = DrainController::new();
 ```
 
-## Wiring it into `axum::serve`
+## Signal semantics
+
+The `SignalExitSource` (feature `signals`) installs canonical handlers:
+
+| Signal | `ShutdownKind` | Drains? | Exits? |
+| --- | --- | --- | --- |
+| `SIGINT` / `SIGTERM` | `Graceful` | Yes | Yes |
+| `SIGHUP` | `Reload` | No | No (keep serving) |
+| `SIGQUIT` | `Immediate` | Yes (skip drain) | Yes |
+
+`SIGHUP` does **not** trigger drain — `wait_for_drain()` does not resolve on
+reload. Use `wait_for_signal()` if you need to observe reloads too.
+
+## Programmatic drain
+
+Trigger drain from inside the process (e.g. from a `Lifecycle.Drain` RPC):
 
 ```rust
-axum::serve(listener, app)
-    .with_graceful_shutdown(async {
-        ctrl.wait_for_drain().await;
-    })
-    .await?;
+ctrl.begin_drain(ShutdownKind::Graceful); // → all wait_for_drain() callers wake
 ```
-
-`wait_for_drain` resolves on `SIGINT`/`SIGTERM`/`SIGQUIT` but **not** on `SIGHUP`,
-so a reload does not accidentally shut down the server.
 
 ## Observing drain state
 
@@ -54,16 +46,43 @@ if ctrl.is_draining() {
     // refuse new work
 }
 
-// Sleep, but wake early if drain begins:
-ctrl.sleep_or_drain(std::time::Duration::from_secs(30)).await;
+// Which kind fired?
+if let Some(kind) = ctrl.kind() {
+    println!("shutdown kind: {kind:?}");
+}
+
+// Async wait (resolves on Graceful or Immediate, NOT on Reload):
+let kind = ctrl.wait_for_drain().await;
+
+// Async wait for any signal (including Reload):
+let kind = ctrl.wait_for_signal().await;
 ```
 
-## Programmatic drain
+## Using `Supervised`
 
-You can also trigger drain from inside the process (e.g. an admin RPC):
+`Supervised` composes `DrainController` + an exit source + drain hooks into a
+single serve loop:
 
 ```rust
-ctrl.begin_drain(malkuth::ShutdownKind::Graceful);
+use malkuth::{Supervised, Router};
+use malkuth::transport::TcpTransport;
+use malkuth::Transport;
+use std::sync::Arc;
+
+let supervised = Supervised::new()
+    .signals()                          // install OS signal handler
+    .on_drain(MyDrainHook)              // run cleanup during shutdown
+    .drain_budget(std::time::Duration::from_secs(30));
+
+let ctrl = supervised.drain_controller();
+let handler = Arc::new(
+    Router::new().lifecycle(ctrl, None)
+);
+
+// Serve JSON-RPC until a signal fires, then run drain hooks:
+supervised
+    .serve_rpc(&TcpTransport, "tcp://0.0.0.0:8080", handler)
+    .await?;
 ```
 
 ## `ShutdownKind`

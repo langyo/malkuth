@@ -2,20 +2,20 @@
 
 ## Модель
 
-**Воркер** — это независимо завершаемый дочерний процесс, который владеет ровно одним
-ресурсом (подключением к PLC, последовательным портом, sidecar'ом вроде cosmos или pglite-proxy).
-Дочерний процесс является **границей изоляции сбоев**: если ресурс падает,
-перезапускается только воркер — родитель продолжает обслуживать.
+**Воркер** — это независимо убиваемый дочерний процесс, который владеет ровно
+одним ресурсом (соединением с ПЛК, последовательным портом, сайдкаром вроде
+cosmos или pglite-proxy). Дочерний процесс — это **граница изоляции сбоев**: если
+ресурс падает, перезапускается только воркер — родитель продолжает обслуживать.
 
 ## Определение воркеров
 
 ```rust
-use malkuth::{Supervisor, WorkerSpec};
-use malkuth::RestartPolicy;
+use malkuth::{Supervisor, WorkerSpec, RestartPolicy, DrainController};
 
 let workers = vec![
     WorkerSpec::new("plc-1", "modbus", "/usr/bin/modbus-bridge")
         .args(["--device", "/dev/ttyUSB0"])
+        .env("LOG_LEVEL", "debug")
         .policy(RestartPolicy::Permanent),
 
     WorkerSpec::new("cosmos", "cosmos", "/usr/bin/cosmos-agent")
@@ -35,7 +35,8 @@ let workers = vec![
 
 ## Ограничение частоты
 
-Супервизор применяет **ограничение частоты со скользящим окном** для защиты от шторма сбоев:
+Супервизор применяет **ограничение частоты со скользящим окном**, чтобы
+предотвратить штормы падений:
 
 ```rust
 let supervisor = Supervisor::new(workers)
@@ -43,33 +44,46 @@ let supervisor = Supervisor::new(workers)
     .cooldown(std::time::Duration::from_secs(30));      // then cooldown 30s
 ```
 
-Если воркер падает более `max_restarts` раз в пределах окна, он переходит в
-период охлаждения перед следующей попыткой.
+Если воркер падает более `max_restarts` раз в пределах окна, перед следующей
+попыткой он входит в период охлаждения.
 
 ## Запуск супервизора
 
 ```rust
-use tokio::sync::watch;
+use malkuth::DrainController;
 
-let (shutdown_tx, shutdown_rx) = watch::channel(false);
-
+let drain = DrainController::new();
 let supervisor = Supervisor::new(workers)
     .rate_limit(5, std::time::Duration::from_secs(60));
 
-// Run until shutdown signal:
+// Run until drain signal:
 tokio::spawn(async move {
-    let final_status = supervisor.run(shutdown_rx).await;
+    let final_status = supervisor.run(drain).await;
     for w in &final_status {
         tracing::info!(worker = %w.id, status = ?w.status, restarts = w.restart_count, "final");
     }
 });
 
 // Later, trigger shutdown:
-let _ = shutdown_tx.send(true);
+// drain.begin_drain(ShutdownKind::Graceful);
 ```
+
+`Supervisor::run` состязает выход каждого дочернего процесса с
+`wait_for_drain()`. При дрейне все дочерние процессы убиваются (`kill_on_drop`),
+и возвращаются финальные снимки `WorkerInfo`.
 
 ## Снимки состояния воркеров
 
-После завершения `supervisor.run()` (при остановке) возвращается `Vec<WorkerInfo>`
-с финальным состоянием, количеством перезапусков и последней ошибкой каждого воркера —
-полезно для логирования или передачи в систему мониторинга.
+После завершения `supervisor.run()` возвращается `Vec<WorkerInfo>` с финальным
+состоянием каждого воркера, числом перезапусков и последней ошибкой:
+
+```rust
+pub struct WorkerInfo {
+    pub id: String,
+    pub kind: String,
+    pub status: WorkerStatus,     // Starting | Running | Stopped | Failed
+    pub restart_policy: RestartPolicy,
+    pub restart_count: u32,
+    pub last_error: Option<String>,
+}
+```

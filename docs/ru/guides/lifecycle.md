@@ -1,52 +1,46 @@
-# Плавная остановка и drain
+# Мягкое завершение и дрейн
 
 ## Проблема
 
 Большинство Rust-серверов перехватывают только `ctrl_c` (SIGINT). Однако
-`docker stop`, `systemctl restart` и завершение pod'ов Kubernetes отправляют
-**SIGTERM** — что обходит вашу плавную остановку и убивает выполняемые запросы.
+`docker stop`, `systemctl restart` и завершение подов Kubernetes отправляют
+**SIGTERM** — это обходит мягкое завершение и убивает летящие запросы после
+истечения льготного периода.
 
-## Решение: `DrainController`
+## `DrainController`
 
-`DrainController::install()` устанавливает канонические обработчики сигналов,
-следуя соглашению nginx/Go:
-
-| Сигнал | Значение | Выполнять drain? |
-| --- | --- | --- |
-| `SIGINT` / `SIGTERM` | Плавная остановка | Да |
-| `SIGHUP` | Горячая перезагрузка конфигурации | Нет (сервер продолжает работать) |
-| `SIGQUIT` | Немедленный выход | Да (пропустить drain) |
-
-## Использование
+`DrainController` хранит разделяемый флаг дрейна и позволяет любой задаче
+ожидать его. Он построен на `tokio::sync::Notify` + атомарных операциях.
 
 ```rust
-use malkuth::DrainController;
+use malkuth::{DrainController, ShutdownKind};
 
-let ctrl = DrainController::install();
-
-// Pass clones to whoever needs to observe drain:
-// - the serve loop (to stop accepting)
-// - the probe layer (to set the /readyz draining bit)
-// - background tasks (to wind down)
-
-// Block until a drain/immediate signal fires.
-let kind = ctrl.wait_for_drain().await;
+let ctrl = DrainController::new();
 ```
 
-## Интеграция с `axum::serve`
+## Семантика сигналов
+
+`SignalExitSource` (feature `signals`) устанавливает канонические обработчики:
+
+| Сигнал | `ShutdownKind` | Дрейн? | Выход? |
+| --- | --- | --- | --- |
+| `SIGINT` / `SIGTERM` | `Graceful` | Да | Да |
+| `SIGHUP` | `Reload` | Нет | Нет (продолжает обслуживать) |
+| `SIGQUIT` | `Immediate` | Да (пропуск дрейна) | Да |
+
+`SIGHUP` **не** запускает дрейн — `wait_for_drain()` не разрешается при
+перезагрузке. Используйте `wait_for_signal()`, если нужно наблюдать и
+перезагрузки.
+
+## Программный дрейн
+
+Запустите дрейн изнутри процесса (например, через RPC `Lifecycle.Drain`):
 
 ```rust
-axum::serve(listener, app)
-    .with_graceful_shutdown(async {
-        ctrl.wait_for_drain().await;
-    })
-    .await?;
+ctrl.begin_drain(ShutdownKind::Graceful); // → all wait_for_drain() callers wake
 ```
 
-`wait_for_drain` завершается при `SIGINT`/`SIGTERM`/`SIGQUIT`, но **не** при
-`SIGHUP`, поэтому перезагрузка не приводит к случайной остановке сервера.
-
-## Наблюдение за состоянием drain
+## Наблюдение за состоянием дрейна
 
 ```rust
 // Non-blocking check:
@@ -54,17 +48,43 @@ if ctrl.is_draining() {
     // refuse new work
 }
 
-// Sleep, but wake early if drain begins:
-ctrl.sleep_or_drain(std::time::Duration::from_secs(30)).await;
+// Which kind fired?
+if let Some(kind) = ctrl.kind() {
+    println!("shutdown kind: {kind:?}");
+}
+
+// Async wait (resolves on Graceful or Immediate, NOT on Reload):
+let kind = ctrl.wait_for_drain().await;
+
+// Async wait for any signal (including Reload):
+let kind = ctrl.wait_for_signal().await;
 ```
 
-## Программный drain
+## Использование `Supervised`
 
-Вы также можете запустить drain изнутри процесса (например, через
-административный RPC):
+`Supervised` компонует `DrainController` + источник выхода + дрейн-хуки в
+единый цикл обслуживания:
 
 ```rust
-ctrl.begin_drain(malkuth::ShutdownKind::Graceful);
+use malkuth::{Supervised, Router};
+use malkuth::transport::TcpTransport;
+use malkuth::Transport;
+use std::sync::Arc;
+
+let supervised = Supervised::new()
+    .signals()                          // install OS signal handler
+    .on_drain(MyDrainHook)              // run cleanup during shutdown
+    .drain_budget(std::time::Duration::from_secs(30));
+
+let ctrl = supervised.drain_controller();
+let handler = Arc::new(
+    Router::new().lifecycle(ctrl, None)
+);
+
+// Serve JSON-RPC until a signal fires, then run drain hooks:
+supervised
+    .serve_rpc(&TcpTransport, "tcp://0.0.0.0:8080", handler)
+    .await?;
 ```
 
 ## `ShutdownKind`

@@ -1,50 +1,45 @@
-# Arrêt progressif et vidange
+# Arrêt gracieux et vidange
 
 ## Le problème
 
 La plupart des serveurs Rust ne captent que `ctrl_c` (SIGINT). Or `docker stop`,
 `systemctl restart` et la terminaison des pods Kubernetes envoient **SIGTERM** —
-ce qui contourne votre arrêt progressif et tue les requêtes en cours.
+ce qui contourne l'arrêt gracieux et tue les requêtes en cours après l'expiration
+du délai de grâce.
 
-## La solution : `DrainController`
+## `DrainController`
 
-`DrainController::install()` met en place des gestionnaires de signaux canoniques
-selon la convention nginx/Go :
-
-| Signal | Signification | Vidange ? |
-| --- | --- | --- |
-| `SIGINT` / `SIGTERM` | Arrêt progressif | Oui |
-| `SIGHUP` | Rechargement à chaud de la config | Non (le serveur continue de servir) |
-| `SIGQUIT` | Sortie immédiate | Oui (vidange ignorée) |
-
-## Utilisation
+`DrainController` conserve un drapeau de vidange partagé et permet à n'importe
+quelle tâche de l'attendre. Il repose sur `tokio::sync::Notify` + atomiques.
 
 ```rust
-use malkuth::DrainController;
+use malkuth::{DrainController, ShutdownKind};
 
-let ctrl = DrainController::install();
-
-// Pass clones to whoever needs to observe drain:
-// - the serve loop (to stop accepting)
-// - the probe layer (to set the /readyz draining bit)
-// - background tasks (to wind down)
-
-// Block until a drain/immediate signal fires.
-let kind = ctrl.wait_for_drain().await;
+let ctrl = DrainController::new();
 ```
 
-## Intégration dans `axum::serve`
+## Sémantique des signaux
+
+`SignalExitSource` (feature `signals`) installe des gestionnaires canoniques :
+
+| Signal | `ShutdownKind` | Vidange ? | Sortie ? |
+| --- | --- | --- | --- |
+| `SIGINT` / `SIGTERM` | `Graceful` | Oui | Oui |
+| `SIGHUP` | `Reload` | Non | Non (continue de servir) |
+| `SIGQUIT` | `Immediate` | Oui (vidange ignorée) | Oui |
+
+`SIGHUP` ne déclenche **pas** de vidange — `wait_for_drain()` ne se résout pas
+lors d'un rechargement. Utilisez `wait_for_signal()` si vous devez aussi observer
+les rechargements.
+
+## Vidange par programme
+
+Déclenchez la vidange depuis l'intérieur du processus (par ex. via un RPC
+`Lifecycle.Drain`) :
 
 ```rust
-axum::serve(listener, app)
-    .with_graceful_shutdown(async {
-        ctrl.wait_for_drain().await;
-    })
-    .await?;
+ctrl.begin_drain(ShutdownKind::Graceful); // → all wait_for_drain() callers wake
 ```
-
-`wait_for_drain` se résout sur `SIGINT`/`SIGTERM`/`SIGQUIT` mais **pas** sur
-`SIGHUP`, afin qu'un rechargement n'arrête pas accidentellement le serveur.
 
 ## Observer l'état de vidange
 
@@ -54,17 +49,43 @@ if ctrl.is_draining() {
     // refuse new work
 }
 
-// Sleep, but wake early if drain begins:
-ctrl.sleep_or_drain(std::time::Duration::from_secs(30)).await;
+// Which kind fired?
+if let Some(kind) = ctrl.kind() {
+    println!("shutdown kind: {kind:?}");
+}
+
+// Async wait (resolves on Graceful or Immediate, NOT on Reload):
+let kind = ctrl.wait_for_drain().await;
+
+// Async wait for any signal (including Reload):
+let kind = ctrl.wait_for_signal().await;
 ```
 
-## Vidange programmée
+## Utiliser `Supervised`
 
-Vous pouvez également déclencher la vidange depuis l'intérieur du processus
-(par ex. un RPC d'administration) :
+`Supervised` compose `DrainController` + une source de sortie + des hooks de
+vidange en une seule boucle de service :
 
 ```rust
-ctrl.begin_drain(malkuth::ShutdownKind::Graceful);
+use malkuth::{Supervised, Router};
+use malkuth::transport::TcpTransport;
+use malkuth::Transport;
+use std::sync::Arc;
+
+let supervised = Supervised::new()
+    .signals()                          // install OS signal handler
+    .on_drain(MyDrainHook)              // run cleanup during shutdown
+    .drain_budget(std::time::Duration::from_secs(30));
+
+let ctrl = supervised.drain_controller();
+let handler = Arc::new(
+    Router::new().lifecycle(ctrl, None)
+);
+
+// Serve JSON-RPC until a signal fires, then run drain hooks:
+supervised
+    .serve_rpc(&TcpTransport, "tcp://0.0.0.0:8080", handler)
+    .await?;
 ```
 
 ## `ShutdownKind`

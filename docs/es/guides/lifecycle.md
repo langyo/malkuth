@@ -1,50 +1,44 @@
-# Apagado elegante y drenaje
+# Apagado gracioso y drenaje
 
 ## El problema
 
-La mayoría de los servidores Rust solo capturan `ctrl_c` (SIGINT). Pero
+La mayoría de servidores Rust solo capturan `ctrl_c` (SIGINT). Pero
 `docker stop`, `systemctl restart` y la terminación de pods de Kubernetes envían
-**SIGTERM** — lo que ignora tu apagado elegante y mata las solicitudes en curso.
+**SIGTERM** — lo que elude el apagado gracioso y mata las solicitudes en vuelo
+tras el periodo de gracia.
 
-## La solución: `DrainController`
+## `DrainController`
 
-`DrainController::install()` configura manejadores de señales canónicos siguiendo
-la convención de nginx/Go:
-
-| Señal | Significado | ¿Drenar? |
-| --- | --- | --- |
-| `SIGINT` / `SIGTERM` | Apagado elegante | Sí |
-| `SIGHUP` | Recarga en caliente de configuración | No (el servidor sigue sirviendo) |
-| `SIGQUIT` | Salida inmediata | Sí (omite el drenaje) |
-
-## Uso
+`DrainController` mantiene una bandera de drenaje compartida y permite que
+cualquier tarea la espere. Se construye sobre `tokio::sync::Notify` + atómicos.
 
 ```rust
-use malkuth::DrainController;
+use malkuth::{DrainController, ShutdownKind};
 
-let ctrl = DrainController::install();
-
-// Pass clones to whoever needs to observe drain:
-// - the serve loop (to stop accepting)
-// - the probe layer (to set the /readyz draining bit)
-// - background tasks (to wind down)
-
-// Block until a drain/immediate signal fires.
-let kind = ctrl.wait_for_drain().await;
+let ctrl = DrainController::new();
 ```
 
-## Integración en `axum::serve`
+## Semántica de señales
+
+`SignalExitSource` (feature `signals`) instala manejadores canónicos:
+
+| Señal | `ShutdownKind` | ¿Drena? | ¿Termina? |
+| --- | --- | --- | --- |
+| `SIGINT` / `SIGTERM` | `Graceful` | Sí | Sí |
+| `SIGHUP` | `Reload` | No | No (sigue sirviendo) |
+| `SIGQUIT` | `Immediate` | Sí (omite el drenaje) | Sí |
+
+`SIGHUP` **no** dispara el drenaje — `wait_for_drain()` no se resuelve ante una
+recarga. Usa `wait_for_signal()` si también necesitas observar las recargas.
+
+## Drenaje programático
+
+Dispara el drenaje desde dentro del proceso (por ejemplo, desde un RPC
+`Lifecycle.Drain`):
 
 ```rust
-axum::serve(listener, app)
-    .with_graceful_shutdown(async {
-        ctrl.wait_for_drain().await;
-    })
-    .await?;
+ctrl.begin_drain(ShutdownKind::Graceful); // → all wait_for_drain() callers wake
 ```
-
-`wait_for_drain` se completa con `SIGINT`/`SIGTERM`/`SIGQUIT` pero **no** con
-`SIGHUP`, de modo que una recarga no detiene el servidor accidentalmente.
 
 ## Observar el estado de drenaje
 
@@ -54,17 +48,43 @@ if ctrl.is_draining() {
     // refuse new work
 }
 
-// Sleep, but wake early if drain begins:
-ctrl.sleep_or_drain(std::time::Duration::from_secs(30)).await;
+// Which kind fired?
+if let Some(kind) = ctrl.kind() {
+    println!("shutdown kind: {kind:?}");
+}
+
+// Async wait (resolves on Graceful or Immediate, NOT on Reload):
+let kind = ctrl.wait_for_drain().await;
+
+// Async wait for any signal (including Reload):
+let kind = ctrl.wait_for_signal().await;
 ```
 
-## Drenaje programático
+## Usar `Supervised`
 
-También puedes activar el drenaje desde dentro del proceso (por ejemplo, un RPC
-de administración):
+`Supervised` compone `DrainController` + una fuente de salida + hooks de drenaje
+en un único bucle de servicio:
 
 ```rust
-ctrl.begin_drain(malkuth::ShutdownKind::Graceful);
+use malkuth::{Supervised, Router};
+use malkuth::transport::TcpTransport;
+use malkuth::Transport;
+use std::sync::Arc;
+
+let supervised = Supervised::new()
+    .signals()                          // install OS signal handler
+    .on_drain(MyDrainHook)              // run cleanup during shutdown
+    .drain_budget(std::time::Duration::from_secs(30));
+
+let ctrl = supervised.drain_controller();
+let handler = Arc::new(
+    Router::new().lifecycle(ctrl, None)
+);
+
+// Serve JSON-RPC until a signal fires, then run drain hooks:
+supervised
+    .serve_rpc(&TcpTransport, "tcp://0.0.0.0:8080", handler)
+    .await?;
 ```
 
 ## `ShutdownKind`

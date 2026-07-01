@@ -3,19 +3,19 @@
 ## The model
 
 A **worker** is an independently-killable child process that holds exactly one
-resource (a PLC connection, a serial port, a sidecar like cosmos or pglite-proxy).
-The child process is the **failure-isolation boundary**: if the resource crashes,
-only the worker restarts — the parent keeps serving.
+resource (a PLC connection, a serial port, a sidecar like cosmos or
+pglite-proxy). The child process is the **failure-isolation boundary**: if the
+resource crashes, only the worker restarts — the parent keeps serving.
 
 ## Defining workers
 
 ```rust
-use malkuth::{Supervisor, WorkerSpec};
-use malkuth::RestartPolicy;
+use malkuth::{Supervisor, WorkerSpec, RestartPolicy, DrainController};
 
 let workers = vec![
     WorkerSpec::new("plc-1", "modbus", "/usr/bin/modbus-bridge")
         .args(["--device", "/dev/ttyUSB0"])
+        .env("LOG_LEVEL", "debug")
         .policy(RestartPolicy::Permanent),
 
     WorkerSpec::new("cosmos", "cosmos", "/usr/bin/cosmos-agent")
@@ -49,27 +49,40 @@ cooldown before the next attempt.
 ## Running the supervisor
 
 ```rust
-use tokio::sync::watch;
+use malkuth::DrainController;
 
-let (shutdown_tx, shutdown_rx) = watch::channel(false);
-
+let drain = DrainController::new();
 let supervisor = Supervisor::new(workers)
     .rate_limit(5, std::time::Duration::from_secs(60));
 
-// Run until shutdown signal:
+// Run until drain signal:
 tokio::spawn(async move {
-    let final_status = supervisor.run(shutdown_rx).await;
+    let final_status = supervisor.run(drain).await;
     for w in &final_status {
         tracing::info!(worker = %w.id, status = ?w.status, restarts = w.restart_count, "final");
     }
 });
 
 // Later, trigger shutdown:
-let _ = shutdown_tx.send(true);
+// drain.begin_drain(ShutdownKind::Graceful);
 ```
+
+`Supervisor::run` races each child's exit against `wait_for_drain()`. On drain,
+all children are killed (`kill_on_drop`) and final `WorkerInfo` snapshots are
+returned.
 
 ## Worker status snapshots
 
-After `supervisor.run()` completes (on shutdown), it returns a `Vec<WorkerInfo>`
-with each worker's final state, restart count, and last error — useful for logging
-or reporting to a monitoring system.
+After `supervisor.run()` completes, it returns a `Vec<WorkerInfo>` with each
+worker's final state, restart count, and last error:
+
+```rust
+pub struct WorkerInfo {
+    pub id: String,
+    pub kind: String,
+    pub status: WorkerStatus,     // Starting | Running | Stopped | Failed
+    pub restart_policy: RestartPolicy,
+    pub restart_count: u32,
+    pub last_error: Option<String>,
+}
+```

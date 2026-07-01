@@ -1,12 +1,13 @@
-# Bloqueos de coordinación
+# Cerrojos de coordinación
 
 ## La abstracción
 
-`CoordinationLock` es un trait conectable para la exclusión mutua entre procesos.
-Es la primitiva compartida de ambas estrategias de tolerancia a fallos:
+`CoordinationLock` es un trait enchufable para la exclusión mutua entre procesos.
+Es la primitiva compartida de las dos estrategias de tolerancia a fallos:
 
-- **Replica** (Subsistema A) — coordinar escrituras concurrentes al estado compartido.
-- **Leader/Follower** (Subsistema B) — usar el bloqueo como el lease del líder.
+- **Replica** (Subsistema A) — coordinar escrituras concurrentes a estado
+  compartido.
+- **Leader/Follower** (Subsistema B) — usar el cerrojo como el lease del líder.
 
 ## El trait
 
@@ -25,9 +26,7 @@ pub trait LockGuard: Send + Sync {
 
 ## Backends
 
-### `file-lock` (`flock` POSIX)
-
-Habilita la característica `file-lock`:
+### `FileLock` (`flock` POSIX) — feature `file-lock`
 
 ```toml
 malkuth = { features = ["file-lock"] }
@@ -35,41 +34,69 @@ malkuth = { features = ["file-lock"] }
 
 ```rust
 use malkuth::lock::FileLock;
+use malkuth::CoordinationLock;
 use std::time::Duration;
 
 let lock = FileLock::new("/var/lib/myapp/locks");
-
 let mut guard = lock.acquire("write-queue", Duration::from_secs(30)).await?;
 // ... exclusive work ...
 guard.release().await; // or just drop guard
 ```
 
-Un archivo de bloqueo por `key`, creado bajo el directorio raíz. Usa `flock(LOCK_EX | LOCK_NB)`
-para bloqueos exclusivos no bloqueantes. Si otro proceso mantiene el bloqueo, devuelve
-`LockError::Contended`.
+Un archivo de cerrojo por cada `key`, creado bajo el directorio raíz. Usa
+`flock(LOCK_EX | LOCK_NB)` para cerrojos exclusivos no bloqueantes. Si otro
+proceso retiene el cerrojo, devuelve `LockError::Contended`.
 
-### `lease` (bloqueo de archivo con TTL)
+> **Solo Unix.** `FileLock` usa `flock` POSIX y solo está disponible en destinos
+> Unix (Linux, macOS, BSD).
 
-Habilita la característica `lease` (implica `file-lock`):
+### `LeaseLock` (lease de archivo con TTL) — feature `lease`
 
 ```toml
 malkuth = { features = ["lease"] }
 ```
 
-La misma API que `file-lock`, pero si el poseedor del bloqueo se cae, el lease expira
-tras el TTL y otro proceso puede adquirirlo. Útil para despliegues de un solo host donde
-el poseedor del bloqueo podría morir sin liberarlo.
+```rust
+use malkuth::lease::LeaseLock;
+use malkuth::CoordinationLock;
 
-### `pg-lock` (bloqueo consultivo de PostgreSQL)
+let lock = LeaseLock::new("/var/lib/myapp/leases");
+let mut guard = lock.acquire("device-leader", Duration::from_secs(10)).await?;
+// The lease auto-renews in the background. If the process crashes,
+// the lease expires after the TTL and another process can acquire it.
+guard.release().await;
+```
 
-Planificado — aún no implementado. Usará `pg_advisory_lock` para la coordinación
-distribuida entre múltiples hosts que comparten una instancia de Postgres.
+Usa renombrado atómico de archivo temporal (CAS) para reclamar el lease. Un hilo
+en segundo plano lo renueva a intervalos de TTL/3. Si hay caída, el sello de
+tiempo `expires_at_ms` del archivo de lease permite al próximo adquirente tomar
+el relevo.
 
-## Cuándo usar cuál
+### `PgLock` (cerrojo consultivo de PostgreSQL) — feature `pg-lock`
+
+```toml
+malkuth = { features = ["pg-lock"] }
+```
+
+```rust
+use malkuth::pg_lock::PgLock;
+use malkuth::CoordinationLock;
+use tokio_postgres::NoTls;
+
+let (client, connection) = tokio_postgres::connect("host=localhost dbname=myapp", NoTls).await?;
+let lock = PgLock::new(std::sync::Arc::new(client));
+let mut guard = lock.acquire("shared-config", Duration::from_secs(30)).await?;
+guard.release().await;
+```
+
+Usa `pg_try_advisory_lock` / `pg_advisory_unlock` a nivel sesión sobre una clave
+bigint derivada de la cadena `key` mediante un hash FNV-1a.
+
+## Cuál usar cuándo
 
 | Escenario | Backend |
 | --- | --- |
-| Un solo host, el poseedor no se caerá | `file-lock` |
-| Un solo host, el poseedor podría caerse | `lease` |
-| Múltiples hosts, Postgres compartido | `pg-lock` (planificado) |
+| Host único, el titular no caerá | `FileLock` |
+| Host único, el titular podría caer | `LeaseLock` |
+| Múltiples hosts, Postgres compartido | `PgLock` |
 | Múltiples hosts, sin DB compartida | Externo (etcd, Consul) |

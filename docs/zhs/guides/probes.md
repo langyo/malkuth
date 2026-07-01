@@ -1,94 +1,130 @@
 # 健康探针
 
-## 拆分探针：`/healthz` 与 `/readyz`
+## `ProbeSink` trait
 
-Malkuth 遵循 Kubernetes 的惯例，提供**两个独立的探针端点**：
+Malkuth 将**探针状态**与**它的暴露方式**分离开来。`ProbeSink` trait 定义了
+两个查询：
 
-- **`GET /healthz`** —— *存活*："进程还活着吗？"如果失败，编排器会
-  **重启**该实例。
-- **`GET /readyz`** —— *就绪*："此实例现在能服务流量吗？"如果失败，
-  编排器会**停止路由流量**，但不会重启。
+```rust
+#[async_trait]
+pub trait ProbeSink: Send + Sync {
+    async fn ready(&self) -> ReadyStatus;
+    async fn health(&self) -> HealthStatus;
+}
+```
 
-这个区分在滚动更新期间很重要：一个正在排空的实例是*存活的*
-（healthz = 200）但*未就绪*（readyz = 503）。
+任何实现了 `ProbeSink` 的类型都可以通过 JSON-RPC 或 HTTP 被查询。
 
-## 设置
+## `ProbeState` —— 内置实现
+
+`ProbeState` 持有版本信息、一个排空状态标志位、一个 generation 计数器，以及
+一组依赖检查：
+
+```rust
+use malkuth::{ProbeState, DrainState};
+
+let probe = ProbeState::new(env!("CARGO_PKG_VERSION"));
+
+// Register a dependency that affects readiness.
+// The closure is synchronous — keep it cheap (read an atomic, ping a cached conn).
+probe.add_dependency("database", || { /* return true if healthy */ true });
+
+// Flip the drain bit during shutdown:
+probe.set_drain_state(DrainState::Draining);
+
+// Record the deployment generation (visible in the status response):
+probe.set_generation(Some(2));
+```
+
+## 通过 JSON-RPC 暴露（主要方式）
+
+`Router::lifecycle(ctrl, Some(probe))` 注册标准方法，在每次调用时查询
+`ProbeSink`：
+
+```rust
+use std::sync::Arc;
+use malkuth::{ProbeState, Router, Supervised};
+use malkuth::transport::TcpTransport;
+use malkuth::Transport;
+
+let supervised = Supervised::new().signals();
+let ctrl = supervised.drain_controller();
+let probe = Arc::new(ProbeState::new("0.2.0"));
+
+let handler = Arc::new(
+    Router::new()
+        .lifecycle(ctrl, Some(probe.clone()))
+        .route("ping", |_| Box::pin(async { Ok(serde_json::json!("pong")) })),
+);
+
+supervised.serve_rpc(&TcpTransport, "tcp://0.0.0.0:8080", handler).await?;
+```
+
+### `Lifecycle.Health` → `HealthStatus`
+
+```json
+// Request: { "jsonrpc": "2.0", "id": 1, "method": "Lifecycle.Health", "params": {} }
+// Response:
+{ "alive": true, "pid": 12345, "uptime_secs": 360, "version": "0.2.0" }
+```
+
+### `Lifecycle.Status` → `ReadyStatus`
+
+```json
+// Request: { "jsonrpc": "2.0", "id": 2, "method": "Lifecycle.Status", "params": {} }
+// Response:
+{
+  "ready": true,
+  "draining": false,
+  "dependencies": [{ "name": "database", "ok": true }],
+  "generation": 2
+}
+```
+
+当 `draining` 为 `true` 或任意依赖项为 `ok: false` 时，`ready` 为 `false`。
+
+## 通过 HTTP 暴露（可选，feature `probes`）
+
+对于期望 HTTP 的 Kubernetes 风格 HTTP 探针或外部负载均衡器，启用 `probes`
+feature 即可获得 axum 路由：
 
 ```rust
 use malkuth::{ProbeState, probe_router};
 
 let probe = ProbeState::new(env!("CARGO_PKG_VERSION"));
+probe.add_dependency("database", || { true });
 
-// Register dependencies that affect readiness:
-probe.add_dependency("database", || {
-    // Return true if the DB connection is healthy.
-    // This is a sync closure — keep it cheap (read an atomic, ping a cached conn).
-    true
-}).await;
-
-// Merge the probe routes into your app:
 let app = axum::Router::new()
-    .merge(probe_router(probe));
+    .merge(probe_router(probe));   // GET /healthz + GET /readyz
 ```
 
-## 响应格式
+| 端点 | 返回 | HTTP 状态 |
+| --- | --- | --- |
+| `GET /healthz` | `HealthStatus` | 始终 200 |
+| `GET /readyz` | `ReadyStatus` | 就绪为 200，排空中 / 依赖异常为 503 |
 
-### `/healthz`（只要进程能应答就始终返回 200）
+响应结构与 JSON-RPC 方法完全一致 —— `ProbeState` 实现了 `ProbeSink`，因此
+两条路径查询的是同一份底层状态。
 
-```json
-{
-  "alive": true,
-  "pid": 12345,
-  "uptime_secs": 3600,
-  "version": "0.1.0"
-}
-```
+## 把排空接入探针
 
-### `/readyz`（未就绪时返回 503）
-
-```json
-{
-  "ready": true,
-  "draining": false,
-  "dependencies": [
-    { "name": "database", "ok": true }
-  ],
-  "generation": 2
-}
-```
-
-当正在排空或某个依赖不健康时，`ready` 为 `false`，HTTP 状态码为
-`503 Service Unavailable`。
-
-## 接入排空位
-
-在优雅关闭期间，设置排空标志，使 `/readyz` 开始返回 503：
+在优雅关闭期间设置排空状态，以便 `Lifecycle.Status`（以及 `/readyz`）反映它：
 
 ```rust
-let probe = ProbeState::new(env!("CARGO_PKG_VERSION"));
-let ctrl = DrainController::install();
+use malkuth::{DrainController, DrainState, ShutdownKind};
 
-// In your shutdown sequence:
+let ctrl = DrainController::new();
+let probe = ProbeState::new("0.2.0");
+
 tokio::spawn({
     let probe = probe.clone();
     let ctrl = ctrl.clone();
     async move {
-        // Wait until drain begins, then flip the bit.
         ctrl.wait_for_drain().await;
-        probe.set_draining(true).await;
+        probe.set_drain_state(DrainState::Draining);
     }
 });
 ```
 
-这样负载均衡器会看到 `/readyz` 变为 503，并在进程退出**之前**停止发送
-新流量 —— 这正是零停机滚动更新的核心。
-
-## 部署世代
-
-跟踪此实例所属的部署世代：
-
-```rust
-probe.set_generation(Some(2)).await; // generation 2 of a rolling update
-```
-
-这会包含在 `/readyz` 响应中，用于可观测性和编排。
+这样编排器就会在进程退出**之前**看到就绪位翻转为 `false` —— 这正是零停机滚动
+更新的核心所在。

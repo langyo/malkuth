@@ -1,95 +1,133 @@
 # ヘルスプローブ
 
-## プローブの分離：`/healthz` と `/readyz`
+## `ProbeSink` トレイト
 
-Malkuth は Kubernetes の慣例に従い、**2 つの独立したプローブエンドポイント**を提供します：
+Malkuth は**プローブ状態**を**それを公開する方法**から分離します。
+`ProbeSink` トレイトは 2 つのクエリを定義します：
 
-- **`GET /healthz`** —— *ライブネス*：「プロセスは生きているか？」これが失敗すると、
-  オーケストレータはそのインスタンスを**再起動**します。
-- **`GET /readyz`** —— *レディネス*：「このインスタンスは今すぐトラフィックを処理できるか？」
-  これが失敗すると、オーケストレータは**トラフィックのルーティングを停止**しますが、再起動はしません。
+```rust
+#[async_trait]
+pub trait ProbeSink: Send + Sync {
+    async fn ready(&self) -> ReadyStatus;
+    async fn health(&self) -> HealthStatus;
+}
+```
 
-この区別はローリングアップデート中に重要です：ドレイン中のインスタンスは
-*生きています*（healthz = 200）が、*準備ができていません*（readyz = 503）。
+`ProbeSink` を実装する任意の型は、JSON-RPC または HTTP 経由で照会できます。
 
-## セットアップ
+## `ProbeState` —— 組み込み実装
+
+`ProbeState` はバージョン情報、ドレイン状態フラグ、世代カウンタ、
+依存関係チェックのリストを保持します：
+
+```rust
+use malkuth::{ProbeState, DrainState};
+
+let probe = ProbeState::new(env!("CARGO_PKG_VERSION"));
+
+// Register a dependency that affects readiness.
+// The closure is synchronous — keep it cheap (read an atomic, ping a cached conn).
+probe.add_dependency("database", || { /* return true if healthy */ true });
+
+// Flip the drain bit during shutdown:
+probe.set_drain_state(DrainState::Draining);
+
+// Record the deployment generation (visible in the status response):
+probe.set_generation(Some(2));
+```
+
+## JSON-RPC による公開（主要）
+
+`Router::lifecycle(ctrl, Some(probe))` は標準メソッドを登録し、呼び出しごとに
+`ProbeSink` を照会します：
+
+```rust
+use std::sync::Arc;
+use malkuth::{ProbeState, Router, Supervised};
+use malkuth::transport::TcpTransport;
+use malkuth::Transport;
+
+let supervised = Supervised::new().signals();
+let ctrl = supervised.drain_controller();
+let probe = Arc::new(ProbeState::new("0.2.0"));
+
+let handler = Arc::new(
+    Router::new()
+        .lifecycle(ctrl, Some(probe.clone()))
+        .route("ping", |_| Box::pin(async { Ok(serde_json::json!("pong")) })),
+);
+
+supervised.serve_rpc(&TcpTransport, "tcp://0.0.0.0:8080", handler).await?;
+```
+
+### `Lifecycle.Health` → `HealthStatus`
+
+```json
+// Request: { "jsonrpc": "2.0", "id": 1, "method": "Lifecycle.Health", "params": {} }
+// Response:
+{ "alive": true, "pid": 12345, "uptime_secs": 360, "version": "0.2.0" }
+```
+
+### `Lifecycle.Status` → `ReadyStatus`
+
+```json
+// Request: { "jsonrpc": "2.0", "id": 2, "method": "Lifecycle.Status", "params": {} }
+// Response:
+{
+  "ready": true,
+  "draining": false,
+  "dependencies": [{ "name": "database", "ok": true }],
+  "generation": 2
+}
+```
+
+`draining` が `true` のとき、あるいは任意の依存関係が `ok: false` のとき、
+`ready` は `false` になります。
+
+## HTTP による公開（オプション、feature `probes`）
+
+HTTP を期待する Kubernetes 風 HTTP プローブや外部ロードバランサ向けに、
+`probes` feature を有効化すると axum ルートを取得できます：
 
 ```rust
 use malkuth::{ProbeState, probe_router};
 
 let probe = ProbeState::new(env!("CARGO_PKG_VERSION"));
+probe.add_dependency("database", || { true });
 
-// Register dependencies that affect readiness:
-probe.add_dependency("database", || {
-    // Return true if the DB connection is healthy.
-    // This is a sync closure — keep it cheap (read an atomic, ping a cached conn).
-    true
-}).await;
-
-// Merge the probe routes into your app:
 let app = axum::Router::new()
-    .merge(probe_router(probe));
+    .merge(probe_router(probe));   // GET /healthz + GET /readyz
 ```
 
-## レスポンス形式
+| エンドポイント | 戻り値 | HTTP ステータス |
+| --- | --- | --- |
+| `GET /healthz` | `HealthStatus` | 常に 200 |
+| `GET /readyz` | `ReadyStatus` | レディ時は 200、ドレイン中 / 依存異常時は 503 |
 
-### `/healthz`（プロセスが応答できる限り常に 200）
+レスポンスの形状は JSON-RPC メソッドと同一です —— `ProbeState` は
+`ProbeSink` を実装しているので、両方のパスが同じ基盤状態を照会します。
 
-```json
-{
-  "alive": true,
-  "pid": 12345,
-  "uptime_secs": 3600,
-  "version": "0.1.0"
-}
-```
+## ドレインをプローブに接続
 
-### `/readyz`（準備未完了時は 503）
-
-```json
-{
-  "ready": true,
-  "draining": false,
-  "dependencies": [
-    { "name": "database", "ok": true }
-  ],
-  "generation": 2
-}
-```
-
-ドレイン中や依存関係が異常な場合、`ready` は `false` となり、HTTP ステータスは
-`503 Service Unavailable` になります。
-
-## ドレインビットの組み込み
-
-グレースフルシャットダウン中にドレインフラグを設定すると、`/readyz` が 503 を返すようになります：
+グレースフルシャットダウン中にドレイン状態を設定し、`Lifecycle.Status`
+（および `/readyz`）に反映させます：
 
 ```rust
-let probe = ProbeState::new(env!("CARGO_PKG_VERSION"));
-let ctrl = DrainController::install();
+use malkuth::{DrainController, DrainState, ShutdownKind};
 
-// In your shutdown sequence:
+let ctrl = DrainController::new();
+let probe = ProbeState::new("0.2.0");
+
 tokio::spawn({
     let probe = probe.clone();
     let ctrl = ctrl.clone();
     async move {
-        // Wait until drain begins, then flip the bit.
         ctrl.wait_for_drain().await;
-        probe.set_draining(true).await;
+        probe.set_drain_state(DrainState::Draining);
     }
 });
 ```
 
-これにより、ロードバランサは `/readyz` が 503 になるのを検知し、プロセスが
-終了する**前に**新しいトラフィックの送信を停止します —— これがダウンタイムゼロの
+これにより、オーケストレータはプロセスが終了する**前に**レディ状態が
+`false` に切り替わるのを検知します —— これがダウンタイムゼロの
 ローリングアップデートの中核です。
-
-## デプロイ世代
-
-このインスタンスが属するデプロイ世代を追跡します：
-
-```rust
-probe.set_generation(Some(2)).await; // generation 2 of a rolling update
-```
-
-これは可観測性とオーケストレーションのために `/readyz` レスポンスに含まれます。

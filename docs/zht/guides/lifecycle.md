@@ -2,48 +2,41 @@
 
 ## 問題所在
 
-大多數 Rust 伺服器只捕捉 `ctrl_c`（SIGINT）。但 `docker stop`、`systemctl restart`
-和 Kubernetes Pod 終止會發送 **SIGTERM** —— 這會繞過你的優雅關閉邏輯，
-直接殺掉進行中的請求。
+大多數 Rust 伺服器只捕捉 `ctrl_c`（SIGINT）。但是 `docker stop`、
+`systemctl restart` 以及 Kubernetes pod 終止傳送的是 **SIGTERM** —— 這會繞過
+優雅關閉，並在寬限期後殺死進行中的請求。
 
-## 解決方案：`DrainController`
+## `DrainController`
 
-`DrainController::install()` 遵循 nginx/Go 的慣例，設定標準訊號處理程式：
-
-| 訊號 | 含義 | 是否排空？ |
-| --- | --- | --- |
-| `SIGINT` / `SIGTERM` | 優雅關閉 | 是 |
-| `SIGHUP` | 熱設定重新載入 | 否（伺服器繼續服務） |
-| `SIGQUIT` | 立即退出 | 是（跳過排空） |
-
-## 用法
+`DrainController` 持有一個共享的排空旗標，並允許任意工作等待它。
+它基於 `tokio::sync::Notify` + 原子操作構建。
 
 ```rust
-use malkuth::DrainController;
+use malkuth::{DrainController, ShutdownKind};
 
-let ctrl = DrainController::install();
-
-// Pass clones to whoever needs to observe drain:
-// - the serve loop (to stop accepting)
-// - the probe layer (to set the /readyz draining bit)
-// - background tasks (to wind down)
-
-// Block until a drain/immediate signal fires.
-let kind = ctrl.wait_for_drain().await;
+let ctrl = DrainController::new();
 ```
 
-## 接入 `axum::serve`
+## 訊號語意
+
+`SignalExitSource`（feature `signals`）安裝規範化的訊號處理器：
+
+| 訊號 | `ShutdownKind` | 排空？ | 退出？ |
+| --- | --- | --- | --- |
+| `SIGINT` / `SIGTERM` | `Graceful` | 是 | 是 |
+| `SIGHUP` | `Reload` | 否 | 否（繼續服務） |
+| `SIGQUIT` | `Immediate` | 是（跳過排空） | 是 |
+
+`SIGHUP` **不會**觸發排空 —— 重載時 `wait_for_drain()` 不會被解除阻塞。如果
+你也需要觀察重載，請使用 `wait_for_signal()`。
+
+## 程式化排空
+
+從行程內部觸發排空（例如透過 `Lifecycle.Drain` RPC）：
 
 ```rust
-axum::serve(listener, app)
-    .with_graceful_shutdown(async {
-        ctrl.wait_for_drain().await;
-    })
-    .await?;
+ctrl.begin_drain(ShutdownKind::Graceful); // → all wait_for_drain() callers wake
 ```
-
-`wait_for_drain` 會在 `SIGINT`/`SIGTERM`/`SIGQUIT` 時完成，但**不會**在
-`SIGHUP` 時完成，因此重新載入不會意外關閉伺服器。
 
 ## 觀察排空狀態
 
@@ -53,16 +46,43 @@ if ctrl.is_draining() {
     // refuse new work
 }
 
-// Sleep, but wake early if drain begins:
-ctrl.sleep_or_drain(std::time::Duration::from_secs(30)).await;
+// Which kind fired?
+if let Some(kind) = ctrl.kind() {
+    println!("shutdown kind: {kind:?}");
+}
+
+// Async wait (resolves on Graceful or Immediate, NOT on Reload):
+let kind = ctrl.wait_for_drain().await;
+
+// Async wait for any signal (including Reload):
+let kind = ctrl.wait_for_signal().await;
 ```
 
-## 程式化排空
+## 使用 `Supervised`
 
-你也可以從行程內部觸發排空（例如管理 RPC）：
+`Supervised` 把 `DrainController` + 退出來源 + 排空 hook 組合成一個單一的 serve
+迴圈：
 
 ```rust
-ctrl.begin_drain(malkuth::ShutdownKind::Graceful);
+use malkuth::{Supervised, Router};
+use malkuth::transport::TcpTransport;
+use malkuth::Transport;
+use std::sync::Arc;
+
+let supervised = Supervised::new()
+    .signals()                          // install OS signal handler
+    .on_drain(MyDrainHook)              // run cleanup during shutdown
+    .drain_budget(std::time::Duration::from_secs(30));
+
+let ctrl = supervised.drain_controller();
+let handler = Arc::new(
+    Router::new().lifecycle(ctrl, None)
+);
+
+// Serve JSON-RPC until a signal fires, then run drain hooks:
+supervised
+    .serve_rpc(&TcpTransport, "tcp://0.0.0.0:8080", handler)
+    .await?;
 ```
 
 ## `ShutdownKind`

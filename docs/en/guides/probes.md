@@ -1,96 +1,131 @@
 # Health Probes
 
-## Split probes: `/healthz` vs `/readyz`
+## The `ProbeSink` trait
 
-Malkuth follows the Kubernetes convention of **two separate probe endpoints**:
+Malkuth separates **probe state** from **how it is exposed**. The
+[`ProbeSink`](./lifecycle.md) trait defines two queries:
 
-- **`GET /healthz`** — *Liveness*: "Is the process alive?" If this fails, the
-  orchestrator **restarts** the instance.
-- **`GET /readyz`** — *Readiness*: "Can this instance serve traffic right now?"
-  If this fails, the orchestrator **stops routing traffic** but does not restart.
+```rust
+#[async_trait]
+pub trait ProbeSink: Send + Sync {
+    async fn ready(&self) -> ReadyStatus;
+    async fn health(&self) -> HealthStatus;
+}
+```
 
-The distinction matters during rolling updates: an instance that is draining
-is *alive* (healthz = 200) but *not ready* (readyz = 503).
+Any type that implements `ProbeSink` can be queried over JSON-RPC or HTTP.
 
-## Setup
+## `ProbeState` — the built-in implementation
+
+`ProbeState` holds version info, a drain-state flag, a generation counter, and
+a list of dependency checks:
+
+```rust
+use malkuth::{ProbeState, DrainState};
+
+let probe = ProbeState::new(env!("CARGO_PKG_VERSION"));
+
+// Register a dependency that affects readiness.
+// The closure is synchronous — keep it cheap (read an atomic, ping a cached conn).
+probe.add_dependency("database", || { /* return true if healthy */ true });
+
+// Flip the drain bit during shutdown:
+probe.set_drain_state(DrainState::Draining);
+
+// Record the deployment generation (visible in the status response):
+probe.set_generation(Some(2));
+```
+
+## JSON-RPC exposure (primary)
+
+`Router::lifecycle(ctrl, Some(probe))` registers the standard methods,
+querying the `ProbeSink` on each call:
+
+```rust
+use std::sync::Arc;
+use malkuth::{ProbeState, Router, Supervised};
+use malkuth::transport::TcpTransport;
+use malkuth::Transport;
+
+let supervised = Supervised::new().signals();
+let ctrl = supervised.drain_controller();
+let probe = Arc::new(ProbeState::new("0.2.0"));
+
+let handler = Arc::new(
+    Router::new()
+        .lifecycle(ctrl, Some(probe.clone()))
+        .route("ping", |_| Box::pin(async { Ok(serde_json::json!("pong")) })),
+);
+
+supervised.serve_rpc(&TcpTransport, "tcp://0.0.0.0:8080", handler).await?;
+```
+
+### `Lifecycle.Health` → `HealthStatus`
+
+```json
+// Request: { "jsonrpc": "2.0", "id": 1, "method": "Lifecycle.Health", "params": {} }
+// Response:
+{ "alive": true, "pid": 12345, "uptime_secs": 360, "version": "0.2.0" }
+```
+
+### `Lifecycle.Status` → `ReadyStatus`
+
+```json
+// Request: { "jsonrpc": "2.0", "id": 2, "method": "Lifecycle.Status", "params": {} }
+// Response:
+{
+  "ready": true,
+  "draining": false,
+  "dependencies": [{ "name": "database", "ok": true }],
+  "generation": 2
+}
+```
+
+When `draining` is `true` or any dependency is `ok: false`, `ready` is `false`.
+
+## HTTP exposure (optional, feature `probes`)
+
+For Kubernetes-style HTTP probes or external load balancers that expect HTTP,
+enable the `probes` feature to get axum routes:
 
 ```rust
 use malkuth::{ProbeState, probe_router};
 
 let probe = ProbeState::new(env!("CARGO_PKG_VERSION"));
+probe.add_dependency("database", || { true });
 
-// Register dependencies that affect readiness:
-probe.add_dependency("database", || {
-    // Return true if the DB connection is healthy.
-    // This is a sync closure — keep it cheap (read an atomic, ping a cached conn).
-    true
-}).await;
-
-// Merge the probe routes into your app:
 let app = axum::Router::new()
-    .merge(probe_router(probe));
+    .merge(probe_router(probe));   // GET /healthz + GET /readyz
 ```
 
-## Response shapes
+| Endpoint | Returns | HTTP status |
+| --- | --- | --- |
+| `GET /healthz` | `HealthStatus` | Always 200 |
+| `GET /readyz` | `ReadyStatus` | 200 if ready, 503 if draining / dep down |
 
-### `/healthz` (always 200 if the process can answer)
+The response shapes are identical to the JSON-RPC methods — `ProbeState`
+implements `ProbeSink`, so both paths query the same underlying state.
 
-```json
-{
-  "alive": true,
-  "pid": 12345,
-  "uptime_secs": 3600,
-  "version": "0.1.0"
-}
-```
+## Wiring drain into probes
 
-### `/readyz` (503 when not ready)
-
-```json
-{
-  "ready": true,
-  "draining": false,
-  "dependencies": [
-    { "name": "database", "ok": true }
-  ],
-  "generation": 2
-}
-```
-
-When draining or a dependency is unhealthy, `ready` is `false` and the HTTP
-status is `503 Service Unavailable`.
-
-## Wiring the drain bit
-
-During graceful shutdown, set the draining flag so `/readyz` starts returning 503:
+During graceful shutdown, set the drain state so `Lifecycle.Status` (and
+`/readyz`) reflect it:
 
 ```rust
-use malkuth::DrainController;
+use malkuth::{DrainController, DrainState, ShutdownKind};
 
-let probe = ProbeState::new(env!("CARGO_PKG_VERSION"));
-let ctrl = DrainController::install();
+let ctrl = DrainController::new();
+let probe = ProbeState::new("0.2.0");
 
-// In your shutdown sequence:
 tokio::spawn({
     let probe = probe.clone();
     let ctrl = ctrl.clone();
     async move {
-        // Wait until drain begins, then flip the bit.
         ctrl.wait_for_drain().await;
-        probe.set_draining(true).await;
+        probe.set_drain_state(DrainState::Draining);
     }
 });
 ```
 
-Now the load balancer sees `/readyz` go 503 and stops sending new traffic
-**before** the process exits — the core of zero-downtime rolling updates.
-
-## Deployment generation
-
-Track which deployment generation this instance belongs to:
-
-```rust
-probe.set_generation(Some(2)).await; // generation 2 of a rolling update
-```
-
-This is included in the `/readyz` response for observability and orchestration.
+Now the orchestrator sees readiness flip to `false` **before** the process
+exits — the core of zero-downtime rolling updates.

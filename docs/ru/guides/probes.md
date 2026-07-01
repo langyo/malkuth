@@ -1,97 +1,132 @@
 # Пробы здоровья
 
-## Разделение проб: `/healthz` и `/readyz`
+## Трейт `ProbeSink`
 
-Malkuth следует соглашению Kubernetes о **двух отдельных эндпоинтах проб**:
+Malkuth разделяет **состояние пробы** и **способ её представления**. Трейт
+`ProbeSink` определяет два запроса:
 
-- **`GET /healthz`** —— *Liveness*: "Жив ли процесс?" В случае сбоя оркестратор
-  **перезапускает** экземпляр.
-- **`GET /readyz`** —— *Readiness*: "Может ли этот экземпляр обслуживать трафик прямо
-  сейчас?" В случае сбоя оркестратор **перестаёт направлять трафик**, но не
-  перезапускает.
+```rust
+#[async_trait]
+pub trait ProbeSink: Send + Sync {
+    async fn ready(&self) -> ReadyStatus;
+    async fn health(&self) -> HealthStatus;
+}
+```
 
-Это различие важно при скользящем обновлении: экземпляр в состоянии drain *жив*
-(healthz = 200), но *не готов* (readyz = 503).
+Любой тип, реализующий `ProbeSink`, можно опрашивать через JSON-RPC или HTTP.
 
-## Настройка
+## `ProbeState` — встроенная реализация
+
+`ProbeState` хранит информацию о версии, флаг состояния дрейна, счётчик поколения
+и список проверок зависимостей:
+
+```rust
+use malkuth::{ProbeState, DrainState};
+
+let probe = ProbeState::new(env!("CARGO_PKG_VERSION"));
+
+// Register a dependency that affects readiness.
+// The closure is synchronous — keep it cheap (read an atomic, ping a cached conn).
+probe.add_dependency("database", || { /* return true if healthy */ true });
+
+// Flip the drain bit during shutdown:
+probe.set_drain_state(DrainState::Draining);
+
+// Record the deployment generation (visible in the status response):
+probe.set_generation(Some(2));
+```
+
+## Представление через JSON-RPC (основной путь)
+
+`Router::lifecycle(ctrl, Some(probe))` регистрирует стандартные методы и при
+каждом вызове опрашивает `ProbeSink`:
+
+```rust
+use std::sync::Arc;
+use malkuth::{ProbeState, Router, Supervised};
+use malkuth::transport::TcpTransport;
+use malkuth::Transport;
+
+let supervised = Supervised::new().signals();
+let ctrl = supervised.drain_controller();
+let probe = Arc::new(ProbeState::new("0.2.0"));
+
+let handler = Arc::new(
+    Router::new()
+        .lifecycle(ctrl, Some(probe.clone()))
+        .route("ping", |_| Box::pin(async { Ok(serde_json::json!("pong")) })),
+);
+
+supervised.serve_rpc(&TcpTransport, "tcp://0.0.0.0:8080", handler).await?;
+```
+
+### `Lifecycle.Health` → `HealthStatus`
+
+```json
+// Request: { "jsonrpc": "2.0", "id": 1, "method": "Lifecycle.Health", "params": {} }
+// Response:
+{ "alive": true, "pid": 12345, "uptime_secs": 360, "version": "0.2.0" }
+```
+
+### `Lifecycle.Status` → `ReadyStatus`
+
+```json
+// Request: { "jsonrpc": "2.0", "id": 2, "method": "Lifecycle.Status", "params": {} }
+// Response:
+{
+  "ready": true,
+  "draining": false,
+  "dependencies": [{ "name": "database", "ok": true }],
+  "generation": 2
+}
+```
+
+Когда `draining` равно `true` или любая зависимость имеет `ok: false`, значение
+`ready` — `false`.
+
+## Представление через HTTP (опционально, feature `probes`)
+
+Для HTTP-проб в стиле Kubernetes или внешних балансировщиков, ожидающих HTTP,
+включите feature `probes`, чтобы получить axum-маршруты:
 
 ```rust
 use malkuth::{ProbeState, probe_router};
 
 let probe = ProbeState::new(env!("CARGO_PKG_VERSION"));
+probe.add_dependency("database", || { true });
 
-// Register dependencies that affect readiness:
-probe.add_dependency("database", || {
-    // Return true if the DB connection is healthy.
-    // This is a sync closure — keep it cheap (read an atomic, ping a cached conn).
-    true
-}).await;
-
-// Merge the probe routes into your app:
 let app = axum::Router::new()
-    .merge(probe_router(probe));
+    .merge(probe_router(probe));   // GET /healthz + GET /readyz
 ```
 
-## Формат ответов
+| Endpoint | Возвращает | HTTP-статус |
+| --- | --- | --- |
+| `GET /healthz` | `HealthStatus` | Всегда 200 |
+| `GET /readyz` | `ReadyStatus` | 200 если готов, 503 при дрейне / падении зависимости |
 
-### `/healthz` (всегда 200, если процесс может ответить)
+Форма ответа идентична методам JSON-RPC — `ProbeState` реализует `ProbeSink`,
+поэтому оба пути опрашивают одно и то же нижележащее состояние.
 
-```json
-{
-  "alive": true,
-  "pid": 12345,
-  "uptime_secs": 3600,
-  "version": "0.1.0"
-}
-```
+## Подключение дрейна к пробам
 
-### `/readyz` (503, когда не готов)
-
-```json
-{
-  "ready": true,
-  "draining": false,
-  "dependencies": [
-    { "name": "database", "ok": true }
-  ],
-  "generation": 2
-}
-```
-
-При drain или неработоспособности зависимости `ready` равен `false`, а HTTP-статус —
-`503 Service Unavailable`.
-
-## Подключение бита drain
-
-Во время плавной остановки установите флаг drain, чтобы `/readyz` начал возвращать
-503:
+Во время мягкого завершения установите состояние дрейна, чтобы
+`Lifecycle.Status` (и `/readyz`) его отражали:
 
 ```rust
-let probe = ProbeState::new(env!("CARGO_PKG_VERSION"));
-let ctrl = DrainController::install();
+use malkuth::{DrainController, DrainState, ShutdownKind};
 
-// In your shutdown sequence:
+let ctrl = DrainController::new();
+let probe = ProbeState::new("0.2.0");
+
 tokio::spawn({
     let probe = probe.clone();
     let ctrl = ctrl.clone();
     async move {
-        // Wait until drain begins, then flip the bit.
         ctrl.wait_for_drain().await;
-        probe.set_draining(true).await;
+        probe.set_drain_state(DrainState::Draining);
     }
 });
 ```
 
-Теперь балансировщик нагрузки видит, как `/readyz` переходит в 503, и прекращает
-отправку нового трафика **до того**, как процесс завершится — основа скользящих
-обновлений без простоев.
-
-## Поколение развёртывания
-
-Отслеживайте, к какому поколению развёртывания принадлежит этот экземпляр:
-
-```rust
-probe.set_generation(Some(2)).await; // generation 2 of a rolling update
-```
-
-Это значение включается в ответ `/readyz` для наблюдаемости и оркестрации.
+Теперь оркестратор видит, как готовность переключается в `false` **до** того,
+как процесс завершится — ядро бесшовных плавающих обновлений.

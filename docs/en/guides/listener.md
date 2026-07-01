@@ -1,5 +1,8 @@
 # Listener Handoff
 
+> **Status: planned.** Socket activation is not yet implemented. The design
+> below describes the intended behaviour.
+
 ## The problem
 
 When a server process restarts, there is a window where no one is listening
@@ -12,7 +15,7 @@ Systemd (or a custom launcher) holds the listening socket fd open. When the
 process restarts, the new process inherits the fd and can immediately accept
 connections — the kernel queues them during the gap.
 
-Malkuth's `acquire_listener` implements this in **pure Rust** (no `libsystemd`):
+The planned API:
 
 ```rust
 use malkuth::acquire_listener;
@@ -21,14 +24,13 @@ use malkuth::acquire_listener;
 let listener = acquire_listener("0.0.0.0:8080").await?;
 ```
 
-Enable the `socket-activation` feature:
+Enable the `socket-activation` feature (not yet available):
 
 ```toml
-[dependencies]
-malkuth = { git = "https://github.com/celestia-island/malkuth.git", branch = "dev", features = ["socket-activation"] }
+malkuth = { features = ["socket-activation"] }
 ```
 
-## How it works
+## How it will work
 
 systemd sets two environment variables:
 
@@ -37,8 +39,8 @@ systemd sets two environment variables:
 | `LISTEN_PID` | PID of the process that should inherit the fds (must equal ours) |
 | `LISTEN_FDS` | Number of fds passed (starting at fd 3) |
 
-Malkuth reads these, validates `LISTEN_PID == our_pid`, takes ownership of
-fd 3 (`SD_LISTEN_FDS_START`), sets it to non-blocking, and wraps it in a
+Malkuth will read these, validate `LISTEN_PID == our_pid`, take ownership of
+fd 3 (`SD_LISTEN_FDS_START`), set it to non-blocking, and wrap it in a
 `tokio::net::TcpListener`.
 
 If the variables are absent or the PID doesn't match, it falls back to
@@ -59,7 +61,6 @@ WantedBy=sockets.target
 # /etc/systemd/system/myapp.service
 [Service]
 ExecStart=/usr/bin/myapp
-# systemd passes the socket fd automatically when the socket unit is active
 ```
 
 With this setup, `systemctl restart myapp` does not drop any in-flight

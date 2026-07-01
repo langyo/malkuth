@@ -2,10 +2,12 @@
 
 ## L'abstraction
 
-`CoordinationLock` est un trait enfichable pour l'exclusion mutuelle entre processus.
-C'est la primitive partagée des deux stratégies de tolérance aux pannes :
+`CoordinationLock` est un trait enfichable pour l'exclusion mutuelle entre
+processus. C'est la primitive partagée des deux stratégies de tolérance aux
+pannes :
 
-- **Replica** (Sous-système A) — coordonner les écritures concurrentes vers l'état partagé.
+- **Replica** (Sous-système A) — coordonner les écritures concurrentes vers un
+  état partagé.
 - **Leader/Follower** (Sous-système B) — utiliser le verrou comme bail de leader.
 
 ## Le trait
@@ -25,9 +27,7 @@ pub trait LockGuard: Send + Sync {
 
 ## Backends
 
-### `file-lock` (`flock` POSIX)
-
-Activez la fonctionnalité `file-lock` :
+### `FileLock` (`flock` POSIX) — feature `file-lock`
 
 ```toml
 malkuth = { features = ["file-lock"] }
@@ -35,41 +35,69 @@ malkuth = { features = ["file-lock"] }
 
 ```rust
 use malkuth::lock::FileLock;
+use malkuth::CoordinationLock;
 use std::time::Duration;
 
 let lock = FileLock::new("/var/lib/myapp/locks");
-
 let mut guard = lock.acquire("write-queue", Duration::from_secs(30)).await?;
 // ... exclusive work ...
 guard.release().await; // or just drop guard
 ```
 
-Un fichier de verrou par `key`, créé sous le répertoire racine. Utilise `flock(LOCK_EX | LOCK_NB)`
-pour des verrous exclusifs non-bloquants. Si un autre processus détient le verrou, renvoie
-`LockError::Contended`.
+Un fichier de verrou par `key`, créé sous le répertoire racine. Utilise
+`flock(LOCK_EX | LOCK_NB)` pour des verrous exclusifs non bloquants. Si un autre
+processus détient le verrou, renvoie `LockError::Contended`.
 
-### `lease` (verrou fichier avec TTL)
+> **Unix uniquement.** `FileLock` utilise `flock` POSIX et n'est disponible que
+> sur les cibles Unix (Linux, macOS, BSD).
 
-Activez la fonctionnalité `lease` (implique `file-lock`) :
+### `LeaseLock` (bail de fichier avec TTL) — feature `lease`
 
 ```toml
 malkuth = { features = ["lease"] }
 ```
 
-Même API que `file-lock`, mais si le détenteur du verrou plante, le bail expire après le TTL
-et un autre processus peut l'acquérir. Utile pour les déploiements mono-hôte où le détenteur
-du verrou risque de mourir sans le relâcher.
+```rust
+use malkuth::lease::LeaseLock;
+use malkuth::CoordinationLock;
 
-### `pg-lock` (verrou consultatif PostgreSQL)
+let lock = LeaseLock::new("/var/lib/myapp/leases");
+let mut guard = lock.acquire("device-leader", Duration::from_secs(10)).await?;
+// The lease auto-renews in the background. If the process crashes,
+// the lease expires after the TTL and another process can acquire it.
+guard.release().await;
+```
 
-Planifié — pas encore implémenté. Utilisera `pg_advisory_lock` pour la coordination
-distribuée entre plusieurs hôtes partageant une instance Postgres.
+Utilise un renommage atomique de fichier temporaire (CAS) pour réclamer le bail.
+Un thread d'arrière-plan le renouvelle à intervalles de TTL/3. En cas de crash,
+l'horodatage `expires_at_ms` du fichier de bail permet au prochain acquéreur de
+prendre le relais.
 
-## Quand utiliser lequel
+### `PgLock` (verrou consultatif PostgreSQL) — feature `pg-lock`
+
+```toml
+malkuth = { features = ["pg-lock"] }
+```
+
+```rust
+use malkuth::pg_lock::PgLock;
+use malkuth::CoordinationLock;
+use tokio_postgres::NoTls;
+
+let (client, connection) = tokio_postgres::connect("host=localhost dbname=myapp", NoTls).await?;
+let lock = PgLock::new(std::sync::Arc::new(client));
+let mut guard = lock.acquire("shared-config", Duration::from_secs(30)).await?;
+guard.release().await;
+```
+
+Utilise `pg_try_advisory_lock` / `pg_advisory_unlock` au niveau session sur une
+clé bigint dérivée de la chaîne `key` via un hachage FNV-1a.
+
+## Lequel choisir
 
 | Scénario | Backend |
 | --- | --- |
-| Hôte unique, le détenteur ne plantera pas | `file-lock` |
-| Hôte unique, le détenteur peut planter | `lease` |
-| Plusieurs hôtes, Postgres partagé | `pg-lock` (planifié) |
+| Hôte unique, le détenteur ne plantera pas | `FileLock` |
+| Hôte unique, le détenteur peut planter | `LeaseLock` |
+| Plusieurs hôtes, Postgres partagé | `PgLock` |
 | Plusieurs hôtes, pas de DB partagée | Externe (etcd, Consul) |

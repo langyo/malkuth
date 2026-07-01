@@ -2,48 +2,41 @@
 
 ## 문제점
 
-대부분의 Rust 서버는 `ctrl_c`(SIGINT)만 잡습니다. 하지만 `docker stop`, `systemctl restart`,
-그리고 Kubernetes 파드 종료는 **SIGTERM**을 보냅니다 —— 이는 우아한 종료를 우회하여
-진행 중인 요청을 강제로 종료합니다.
+대부분의 Rust 서버는 `ctrl_c`(SIGINT)만 잡습니다. 하지만 `docker stop`,
+`systemctl restart`, Kubernetes pod 종료는 **SIGTERM**을 보냅니다 —— 이는
+우아한 종료를 우회해 유예 기간 후 진행 중인 요청을 강제로 종료합니다.
 
-## 해결책: `DrainController`
+## `DrainController`
 
-`DrainController::install()`은 nginx/Go 관례를 따라 표준 시그널 핸들러를 설정합니다:
-
-| 시그널 | 의미 | 드레인 여부 |
-| --- | --- | --- |
-| `SIGINT` / `SIGTERM` | 우아한 종료 | 함 |
-| `SIGHUP` | 핫 설정 리로드 | 안 함（서버가 계속 서비스） |
-| `SIGQUIT` | 즉시 종료 | 함（드레인 건너뜀） |
-
-## 사용법
+`DrainController`는 공유 드레인 플래그를 들고 있으며, 어떤 태스크든 그것을
+기다릴 수 있게 합니다. `tokio::sync::Notify` + 원자 연산 위에 구축되어 있습니다.
 
 ```rust
-use malkuth::DrainController;
+use malkuth::{DrainController, ShutdownKind};
 
-let ctrl = DrainController::install();
-
-// Pass clones to whoever needs to observe drain:
-// - the serve loop (to stop accepting)
-// - the probe layer (to set the /readyz draining bit)
-// - background tasks (to wind down)
-
-// Block until a drain/immediate signal fires.
-let kind = ctrl.wait_for_drain().await;
+let ctrl = DrainController::new();
 ```
 
-## `axum::serve`에 연결하기
+## 시그널 의미론
+
+`SignalExitSource`(feature `signals`)는 정규 시그널 핸들러를 설치합니다:
+
+| 시그널 | `ShutdownKind` | 드레인? | 종료? |
+| --- | --- | --- | --- |
+| `SIGINT` / `SIGTERM` | `Graceful` | 예 | 예 |
+| `SIGHUP` | `Reload` | 아니오 | 아니오(서비스 계속) |
+| `SIGQUIT` | `Immediate` | 예(드레인 건너뜀) | 예 |
+
+`SIGHUP`은 드레인을 트리거하지 **않습니다** —— 리로드 시 `wait_for_drain()`은
+해결되지 않습니다. 리로드도 관찰해야 한다면 `wait_for_signal()`을 사용하세요.
+
+## 프로그래밍 방식의 드레인
+
+프로세스 내부에서(예: `Lifecycle.Drain` RPC에서) 드레인을 트리거합니다:
 
 ```rust
-axum::serve(listener, app)
-    .with_graceful_shutdown(async {
-        ctrl.wait_for_drain().await;
-    })
-    .await?;
+ctrl.begin_drain(ShutdownKind::Graceful); // → all wait_for_drain() callers wake
 ```
-
-`wait_for_drain`은 `SIGINT`/`SIGTERM`/`SIGQUIT`에서 완료되지만 `SIGHUP`에서는 완료**되지 않습니다**.
-따라서 리로드로 인해 서버가 실수로 종료되지 않습니다.
 
 ## 드레인 상태 관찰
 
@@ -53,16 +46,43 @@ if ctrl.is_draining() {
     // refuse new work
 }
 
-// Sleep, but wake early if drain begins:
-ctrl.sleep_or_drain(std::time::Duration::from_secs(30)).await;
+// Which kind fired?
+if let Some(kind) = ctrl.kind() {
+    println!("shutdown kind: {kind:?}");
+}
+
+// Async wait (resolves on Graceful or Immediate, NOT on Reload):
+let kind = ctrl.wait_for_drain().await;
+
+// Async wait for any signal (including Reload):
+let kind = ctrl.wait_for_signal().await;
 ```
 
-## 프로그래밍 방식 드레인
+## `Supervised` 사용
 
-프로세스 내부에서 드레인을 트리거할 수도 있습니다（예: 관리 RPC）:
+`Supervised`는 `DrainController` + 종료 소스 + 드레인 훅을 하나의 serve
+루프로 구성합니다:
 
 ```rust
-ctrl.begin_drain(malkuth::ShutdownKind::Graceful);
+use malkuth::{Supervised, Router};
+use malkuth::transport::TcpTransport;
+use malkuth::Transport;
+use std::sync::Arc;
+
+let supervised = Supervised::new()
+    .signals()                          // install OS signal handler
+    .on_drain(MyDrainHook)              // run cleanup during shutdown
+    .drain_budget(std::time::Duration::from_secs(30));
+
+let ctrl = supervised.drain_controller();
+let handler = Arc::new(
+    Router::new().lifecycle(ctrl, None)
+);
+
+// Serve JSON-RPC until a signal fires, then run drain hooks:
+supervised
+    .serve_rpc(&TcpTransport, "tcp://0.0.0.0:8080", handler)
+    .await?;
 ```
 
 ## `ShutdownKind`

@@ -1,71 +1,95 @@
 # Inicio rápido
 
-## Añadir malkuth a tu proyecto
+## Añadir la dependencia
 
 ```toml
 [dependencies]
 malkuth = { git = "https://github.com/celestia-island/malkuth.git", branch = "dev" }
-# Optional features:
-#   socket-activation  — inherit a listener fd from systemd
-#   file-lock          — POSIX flock coordination-lock backend
-#   lease              — lease-based file lock with TTL auto-expiry
-#   replica            — InstanceRegistry trait (load-balancing)
-#   leader-follower    — LeaderElector trait (active-passive HA)
+# features: tcp (default) | ws | ipc | signals (default) | worker | probes |
+#           file-lock | lease | pg-lock | replica | leader-follower | schema
 ```
 
-## Servidor minimal con apagado elegante y sondas
+## Un servicio JSON-RPC mínimo
 
 ```rust
-use malkuth::{acquire_listener, probe_router, ProbeState, DrainController};
+use std::sync::Arc;
+use malkuth::{Router, Supervised};
+use malkuth::transport::TcpTransport;
+use malkuth::Transport;
+use serde_json::json;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    // 1. Acquire a listener — prefers systemd socket activation,
-    //    falls back to binding the given address.
-    let listener = acquire_listener("0.0.0.0:8080").await?;
+    let lis = TcpTransport.listen("tcp://127.0.0.1:0").await?;
+    let supervised = Supervised::new().signals();
+    let ctrl = supervised.drain_controller();
 
-    // 2. Create probe state and install the drain controller.
-    let probe = ProbeState::new(env!("CARGO_PKG_VERSION"));
-    let ctrl = DrainController::install();
+    let handler = Arc::new(
+        Router::new()
+            .lifecycle(ctrl, None)            // registers Lifecycle.Drain / Status / Health / Reload
+            .route("ping", |_| Box::pin(async { Ok(json!("pong")) })),
+    );
 
-    // 3. Build your router, merging the probe routes.
-    let app = axum::Router::new()
-        .route("/", axum::routing::get(|| async { "hello" }))
-        .merge(probe_router(probe))
-        .with_state(());
-
-    // 4. Serve with graceful shutdown: SIGINT/SIGTERM trigger drain,
-    //    SIGQUIT forces immediate exit, SIGHUP reloads (keeps serving).
-    axum::serve(listener, app)
-        .with_graceful_shutdown(async {
-            ctrl.wait_for_drain().await;
-        })
-        .await?;
-    Ok(())
+    supervised.serve_rpc_listener(lis, handler).await
 }
 ```
 
-## Lo que obtienes
+`Supervised` hace competir al servidor JSON-RPC contra la fuente de salida por
+señal del SO (SIGINT/SIGTERM → drenaje, SIGHUP → recarga, SIGQUIT → salida
+inmediata), y luego ejecuta los hooks de drenaje registrados. Sustituye
+`.signals()` por `.exit(your_impl)` para disparar el drenaje desde tu propia
+lógica.
 
-| Endpoint | Propósito |
-| --- | --- |
-| `GET /healthz` | Disponibilidad — «el proceso está vivo» (pid, tiempo de actividad, versión) |
-| `GET /readyz` | Preparación — «puede servir tráfico» (devuelve 503 durante el drenaje) |
+## Llamarlo desde un cliente
 
-| Señal | Comportamiento |
-| --- | --- |
-| `SIGINT` / `SIGTERM` | Drenaje elegante (terminar trabajo en curso, luego salir) |
-| `SIGHUP` | Recarga en caliente (**no sale** — el servidor sigue sirviendo) |
-| `SIGQUIT` | Salida inmediata (solo emergencias) |
+```rust
+use malkuth::Client;
+use malkuth::transport::TcpTransport;
+use malkuth::Transport;
+use serde_json::json;
 
-## Banderas de características
+let mut c = Client::connect(&TcpTransport, "tcp://127.0.0.1:8080").await?;
 
-| Característica | Lo que habilita |
-| --- | --- |
-| `socket-activation` | Heredar un fd de listener de systemd (reinicio sin tiempo de inactividad) |
-| `file-lock` | Backend `CoordinationLock` basado en `flock` POSIX |
-| `lease` | Bloqueo de archivo basado en lease con expiración automática por TTL al caer |
-| `replica` | Trait `InstanceRegistry` para réplicas con balanceo de carga |
-| `leader-follower` | Trait `LeaderElector` para HA activo-pasivo |
+// Custom method:
+let r = c.call("ping", json!({})).await?;       // → "pong"
 
-Todas las características son opt-in; la compilación por defecto no tiene código unsafe y solo depende de tokio + axum.
+// Standard lifecycle methods (registered by Router::lifecycle):
+c.notify("Lifecycle.Drain", json!({})).await?;  // → server begins graceful drain
+let health = c.call("Lifecycle.Health", json!({})).await?;
+// → { "alive": true, "pid": 12345, "uptime_secs": 360, "version": "0.2.0" }
+let status = c.call("Lifecycle.Status", json!({})).await?;
+// → { "ready": true, "draining": false, "dependencies": [], "generation": null }
+```
+
+## El protocolo de ciclo de vida JSON-RPC
+
+`Router::lifecycle(drain, probe)` registra cuatro métodos estándar:
+
+| Método | Parámetros | Resultado | Efecto |
+| --- | --- | --- | --- |
+| `Lifecycle.Drain` | `{}` | `{ "accepted": true, "draining": true }` | Inicia el drenaje gracioso |
+| `Lifecycle.Reload` | `{}` | `null` | Inicia la recarga (sin salir) |
+| `Lifecycle.Status` | `{}` | `ReadyStatus` | Consulta la preparación (bit de drenaje + dependencias) |
+| `Lifecycle.Health` | `{}` | `HealthStatus` | Consulta la vivacidad (pid / uptime / versión) |
+
+Todos los mensajes son JSON-RPC 2.0 enmarcado en NDJSON sobre el transporte
+elegido.
+
+## Otros transportes
+
+Cambia `TcpTransport` por `WsTransport` (feature `ws`, dirección `ws://host:port`)
+o `IpcTransport` (feature `ipc`, dirección `ipc:/tmp/sock`). O usa
+`MultiTransport`, que despacha según el esquema de la URL
+(`tcp://` / `ws://` / `ipc:`).
+
+## Envolver cualquier programa con el CLI
+
+```bash
+malkuth --watch ./src --proxy 3000:3000-3999 --pod-count 3 -- cargo run
+```
+
+Esto lanza 3 pods (autoasignando los puertos 3001–3003 mediante la variable de
+entorno `PORT`), sondea cada uno hasta que está escuchando, y los frontaliza con
+un reverse proxy persistente en el puerto 3000 (enrutado por hash consistente
+según la IP del cliente). Un cambio bajo `./src` desencadena un reinicio
+progresivo, un pod a la vez.
