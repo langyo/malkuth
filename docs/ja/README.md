@@ -7,7 +7,7 @@
 
 **長期間稼働するプログラムが自己アップグレードと負荷分散を行うためのインフラストラクチャ**
 
-[![License](https://img.shields.io/badge/license-BSL--1.1-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-SySL%201.0-blue)](../../LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 [![GitHub](https://img.shields.io/badge/github-celestia--island%2Fmalkuth-blue.svg)](https://github.com/celestia-island/malkuth)
 
@@ -97,5 +97,4 @@ async fn main() -> std::io::Result<()> {
 
 ## ライセンス
 
-Business Source License 1.1（BSL-1.1）。2030-01-01 に Apache-2.0 または MIT の
-いずれか（選択可）へ自動的に変換されます。[LICENSE](LICENSE) を参照してください。
+Synthetic Source License (SySL) バージョン 1.0 の下でライセンスされています。詳しくは [LICENSE](../../LICENSE) を参照してください。

@@ -7,7 +7,7 @@
 
 **오랫동안 실행되는 프로그램이 스스로 업그레이드하고 부하를 분산할 수 있도록 돕는 인프라**
 
-[![License](https://img.shields.io/badge/license-BSL--1.1-blue.svg)](../../LICENSE)
+[![License](https://img.shields.io/badge/license-SySL%201.0-blue)](../../LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 [![GitHub](https://img.shields.io/badge/github-celestia--island%2Fmalkuth-blue.svg)](https://github.com/celestia-island/malkuth)
 
@@ -99,5 +99,4 @@ async fn main() -> std::io::Result<()> {
 
 ## 라이선스
 
-Business Source License 1.1(BSL-1.1)이며, 2030-01-01에 자동으로 Apache-2.0
-또는 MIT 중 선택으로 전환됩니다. [LICENSE](../../LICENSE)를 참조하세요.
+Synthetic Source License(SySL) 버전 1.0에 따라 라이선스됩니다. 자세한 내용은 [LICENSE](../../LICENSE)를 참조하세요.

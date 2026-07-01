@@ -9,7 +9,8 @@
     { code: 'ko', label: '한국어', prefix: '/ko', browserLangs: ['ko'] },
     { code: 'fr', label: 'Français', prefix: '/fr', browserLangs: ['fr'] },
     { code: 'es', label: 'Español', prefix: '/es', browserLangs: ['es'] },
-    { code: 'ru', label: 'Русский', prefix: '/ru', browserLangs: ['ru'] }
+    { code: 'ru', label: 'Русский', prefix: '/ru', browserLangs: ['ru'] },
+    { code: 'ar', label: 'العربية', prefix: '/ar', browserLangs: ['ar'] }
   ];
 
   var NOTIFICATION_DISMISSED_KEY = 'malkuth-lang-notification-dismissed';
@@ -21,7 +22,8 @@
     'ko': { message: '이 문서는 한국어로도 제공됩니다.', action: '한국어로 전환', dismiss: '닫기' },
     'fr': { message: 'Cette documentation est disponible en français.', action: 'Passer au français', dismiss: 'Fermer' },
     'es': { message: 'Esta documentación está disponible en español.', action: 'Cambiar a español', dismiss: 'Cerrar' },
-    'ru': { message: 'Документация доступна на русском языке.', action: 'Перейти на русский', dismiss: 'Закрыть' }
+    'ru': { message: 'Документация доступна на русском языке.', action: 'Перейти на русский', dismiss: 'Закрыть' },
+    'ar': { message: 'هذه الوثائق متاحة أيضًا باللغة العربية.', action: 'التبديل إلى العربية', dismiss: 'إغلاق' }
   };
 
   function detectCurrentLang() {

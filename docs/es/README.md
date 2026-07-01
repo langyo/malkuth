@@ -7,7 +7,7 @@
 
 **Infraestructura para que programas de larga duración se auto-actualicen y balanceen la carga**
 
-[![License](https://img.shields.io/badge/license-BSL--1.1-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-SySL%201.0-blue)](../../LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 [![GitHub](https://img.shields.io/badge/github-celestia--island%2Fmalkuth-blue.svg)](https://github.com/celestia-island/malkuth)
 
@@ -105,5 +105,4 @@ son contratos de trait con implementaciones completas en preparación. Consulte
 
 ## Licencia
 
-Business Source License 1.1 (BSL-1.1); se convierte automáticamente a tu
-elección de Apache-2.0 o MIT el 2030-01-01. Consulta [LICENSE](../../LICENSE).
+Bajo la licencia Synthetic Source License (SySL), versión 1.0. Consulta [LICENSE](../../LICENSE).

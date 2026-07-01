@@ -7,7 +7,7 @@
 
 **用于长驻程序自我升级与负载均衡的基础设施**
 
-[![License](https://img.shields.io/badge/license-BSL--1.1-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-SySL%201.0-blue)](../../LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 [![GitHub](https://img.shields.io/badge/github-celestia--island%2Fmalkuth-blue.svg)](https://github.com/celestia-island/malkuth)
 
@@ -86,4 +86,4 @@ async fn main() -> std::io::Result<()> {
 
 ## 许可证
 
-Business Source License 1.1 (BSL-1.1)；将于 2030-01-01 自动转换为你选择的 Apache-2.0 或 MIT 许可证。详见 [LICENSE](../../LICENSE)。
+采用合成源码许可证（SySL）1.0 版。详见 [LICENSE](../../LICENSE)。

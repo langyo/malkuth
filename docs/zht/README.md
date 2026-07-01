@@ -7,7 +7,7 @@
 
 **讓長時間執行的程式自我升級並平衡負載的基礎架構**
 
-[![License](https://img.shields.io/badge/license-BSL--1.1-blue.svg)](../../LICENSE)
+[![License](https://img.shields.io/badge/license-SySL%201.0-blue)](../../LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 [![GitHub](https://img.shields.io/badge/github-celestia--island%2Fmalkuth-blue.svg)](https://github.com/celestia-island/malkuth)
 
@@ -86,4 +86,4 @@ async fn main() -> std::io::Result<()> {
 
 ## 授權條款
 
-商業原始碼授權 1.1（BSL-1.1）；將於 2030-01-01 自動轉換為您選擇的 Apache-2.0 或 MIT。詳見 [LICENSE](../../LICENSE)。
+採用合成原始碼授權（SySL）1.0 版。詳見 [LICENSE](../../LICENSE)。
