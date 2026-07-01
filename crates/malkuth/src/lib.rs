@@ -72,3 +72,6 @@ pub use service::Supervised;
 
 #[cfg(feature = "worker")]
 pub use worker::{Supervisor, WorkerSpec};
+
+#[cfg(feature = "probes")]
+pub use probes::{ProbeState, probe_router};

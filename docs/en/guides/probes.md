@@ -3,7 +3,7 @@
 ## The `ProbeSink` trait
 
 Malkuth separates **probe state** from **how it is exposed**. The
-[`ProbeSink`](./lifecycle.md) trait defines two queries:
+[`ProbeSink`](../design/supervision-and-rolling-update.md) trait defines two queries:
 
 ```rust
 #[async_trait]
