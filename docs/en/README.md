@@ -15,7 +15,7 @@
 
 <!-- language switcher is available in the bottom-right corner -->
 
-> **Version 0.2.0** — Workspace of three crates, **tokio-based**. The CLI wraps
+> **Version 0.2.0** — Single crate, **tokio-based**. The CLI wraps
 > *any* program (even one that does not use the library) with a pod pool and a
 > sticky reverse proxy.
 
@@ -34,13 +34,6 @@ Malkuth helps automated, long-running programs do four hard things:
    pod pool, and an L4 sticky reverse proxy.
 
 ## Workspace layout
-
-| Crate | What it is |
-| --- | --- |
-
-| **`malkuth`** | Tokio **implementations**: JSON-RPC codec/server/client, transports (tcp/ws/ipc), workers, probes, signals, lock backends (file/lease/pg), leader election. |
-| **`malkuth-cli`** | The `malkuth` binary — pod pool + file watcher + sticky reverse proxy. |
-
 See the [root README](../../README.md) for the full feature matrix and the CLI
 usage, and [Design](./design/supervision-and-rolling-update.md) for the
 architecture.
