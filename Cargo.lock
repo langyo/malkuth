@@ -692,10 +692,12 @@ version = "0.2.0"
 dependencies = [
  "async-trait",
  "axum",
+ "clap",
  "futures-util",
  "interprocess",
  "libc",
- "malkuth-core",
+ "notify",
+ "schemars",
  "serde",
  "serde_json",
  "thiserror",
@@ -703,37 +705,7 @@ dependencies = [
  "tokio-postgres",
  "tokio-tungstenite",
  "tracing",
-]
-
-[[package]]
-name = "malkuth-cli"
-version = "0.2.0"
-dependencies = [
- "async-trait",
- "clap",
- "libc",
- "malkuth-core",
- "notify",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "malkuth-core"
-version = "0.2.0"
-dependencies = [
- "async-trait",
- "libc",
- "schemars",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -741,7 +713,6 @@ name = "malkuth-test-app"
 version = "0.2.0"
 dependencies = [
  "malkuth",
- "malkuth-core",
  "tokio",
 ]
 
@@ -1839,6 +1810,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
 
 [[patch.unused]]
+name = "arona"
+version = "0.1.0"
+
+[[patch.unused]]
 name = "hikari-animation"
 version = "0.1.0"
 
@@ -1859,10 +1834,6 @@ name = "hikari-theme"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "evernight"
-version = "0.1.0"
-
-[[patch.unused]]
 name = "aoba"
 version = "0.2.0"
 
@@ -1875,9 +1846,9 @@ name = "libnoa"
 version = "0.3.1"
 
 [[patch.unused]]
-name = "hifumi"
-version = "0.1.1"
+name = "evernight"
+version = "0.1.0"
 
 [[patch.unused]]
-name = "arona"
-version = "0.1.0"
+name = "hifumi"
+version = "0.1.1"

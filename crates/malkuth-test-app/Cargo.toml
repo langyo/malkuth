@@ -15,5 +15,4 @@ path = "src/main.rs"
 
 [dependencies]
 malkuth = { path = "../malkuth", features = ["tcp", "worker", "signals"] }
-malkuth-core = { workspace = true }
 tokio = { workspace = true }

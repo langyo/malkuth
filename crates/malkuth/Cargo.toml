@@ -1,6 +1,6 @@
 [package]
 name = "malkuth"
-description = "Service-supervision toolkit: JSON-RPC over pluggable transports (TCP / WebSocket / IPC), supervised workers, split health probes, coordination locks and lease-based leader election. Tokio-based."
+description = "Service-supervision toolkit: JSON-RPC over pluggable transports, supervised workers, split health probes, coordination locks and lease-based leader election. Tokio-based."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,28 +16,38 @@ publish = true
 default = ["tcp", "signals"]
 
 # ── JSON-RPC transports ────────────────────────────────────────
-tcp = []                                  # tokio::net (on by default; tokio is a base dep)
-ws = ["dep:tokio-tungstenite"]            # tokio-tungstenite
-ipc = ["dep:interprocess"]                # interprocess (tokio async)
+tcp = []
+ws = ["dep:tokio-tungstenite"]
+ipc = ["dep:interprocess"]
 
 # ── default facilities ─────────────────────────────────────────
-signals = []                              # tokio::signal ExitSource
-worker = []                               # tokio::process Supervisor
-axum-probe = ["dep:axum"]                 # HTTP /healthz + /readyz router
+signals = []
+worker = []
+probes = ["dep:axum"]
 
-# ── CoordinationLock backends (forwarded from core) ────────────
-file-lock = ["malkuth-core/file-lock"]
-lease = ["malkuth-core/lease"]
+# ── CoordinationLock backends ──────────────────────────────────
+file-lock = []
+lease = []
 pg-lock = ["dep:tokio-postgres"]
 
 # ── fault-tolerance strategy ───────────────────────────────────
-replica = []                              # in-memory InstanceRegistry
-leader-follower = []                      # LeaseLeaderElector over core's lease
+replica = []
+leader-follower = ["lease"]
+
+# ── schema generation ──────────────────────────────────────────
+schema = ["dep:schemars"]
+
+# ── CLI binary ─────────────────────────────────────────────────
+cli = ["dep:clap", "dep:notify", "dep:tracing-subscriber"]
+
+[[bin]]
+name = "malkuth"
+required-features = ["cli"]
 
 [dependencies]
-malkuth-core = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+schemars = { workspace = true, optional = true }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
@@ -48,6 +58,11 @@ tokio-tungstenite = { workspace = true, optional = true }
 interprocess = { workspace = true, optional = true, features = ["tokio"] }
 axum = { version = "0.8", optional = true }
 tokio-postgres = { workspace = true, optional = true }
+
+# CLI-only deps
+clap = { workspace = true, optional = true }
+notify = { workspace = true, optional = true }
+tracing-subscriber = { version = "0.3", optional = true, features = ["env-filter"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

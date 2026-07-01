@@ -13,7 +13,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use axum::routing::get;
 
-use malkuth_core::{DependencyCheck, DrainState, HealthStatus, ProbeSink, ReadyStatus};
+use crate::{DependencyCheck, DrainState, HealthStatus, ProbeSink, ReadyStatus};
 
 type DepChecker = std::sync::Arc<dyn Fn() -> bool + Send + Sync>;
 

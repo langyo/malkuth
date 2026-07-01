@@ -8,7 +8,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use malkuth_core::{DrainController, DrainHook, ExitSource, Transport, WireListener};
+use crate::{DrainController, DrainHook, ExitSource, Transport, WireListener};
 
 use crate::Server;
 use crate::jsonrpc::RpcHandler;

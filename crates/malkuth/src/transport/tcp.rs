@@ -2,8 +2,8 @@
 
 use std::io;
 
+use crate::{Transport, WireConn, WireListener};
 use async_trait::async_trait;
-use malkuth_core::{Transport, WireConn, WireListener};
 use tokio::net::{TcpListener, TcpStream};
 
 use crate::codec::FramedConn;

@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use serde_json::Value;
 use tracing::debug;
 
-use malkuth_core::{Transport, WireConn};
+use crate::{Transport, WireConn};
 
 use crate::jsonrpc::{Id, Request, Response, RpcError};
 

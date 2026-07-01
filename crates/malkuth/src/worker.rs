@@ -9,8 +9,8 @@
 use std::process::Stdio;
 use std::time::{Duration, Instant};
 
+use crate::{DrainController, RestartPolicy, WorkerInfo, WorkerStatus};
 use futures_util::stream::{FuturesUnordered, StreamExt};
-use malkuth_core::{DrainController, RestartPolicy, WorkerInfo, WorkerStatus};
 use tokio::process::{Child, Command};
 use tracing::{info, warn};
 

@@ -6,9 +6,9 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+use crate::traits::{InstanceRegistry, RegistryError};
+use crate::{InstanceInfo, InstanceRole};
 use async_trait::async_trait;
-use malkuth_core::traits::{InstanceRegistry, RegistryError};
-use malkuth_core::{InstanceInfo, InstanceRole};
 
 /// A simple in-memory registry keyed by `(group, instance_id)`.
 pub struct InMemoryRegistry {

@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use malkuth_core::{Transport, WireConn, WireListener};
+use crate::{Transport, WireConn, WireListener};
 use tracing::{debug, warn};
 
 use crate::jsonrpc::{Id, Request, Response, RpcHandler};

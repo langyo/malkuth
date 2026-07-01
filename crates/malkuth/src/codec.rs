@@ -7,8 +7,8 @@
 
 use std::io;
 
+use crate::WireConn;
 use async_trait::async_trait;
-use malkuth_core::WireConn;
 use serde_json::Value;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 

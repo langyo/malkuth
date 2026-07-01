@@ -1,9 +1,9 @@
 //! The `Supervised` orchestrator + `Router::lifecycle`: a single `Lifecycle.Drain`
 //! RPC call flips the shared drain bit the whole service observes.
 
+use malkuth::Transport;
 use malkuth::transport::TcpTransport;
 use malkuth::{Client, Router, Supervised};
-use malkuth_core::Transport;
 use serde_json::json;
 use std::sync::Arc;
 

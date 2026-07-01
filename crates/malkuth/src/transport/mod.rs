@@ -25,11 +25,11 @@ pub use ipc::IpcTransport;
 pub struct MultiTransport;
 
 #[async_trait::async_trait]
-impl malkuth_core::Transport for MultiTransport {
-    async fn listen(&self, addr: &str) -> std::io::Result<Box<dyn malkuth_core::WireListener>> {
+impl crate::Transport for MultiTransport {
+    async fn listen(&self, addr: &str) -> std::io::Result<Box<dyn crate::WireListener>> {
         self.pick(addr).listen(addr).await
     }
-    async fn connect(&self, addr: &str) -> std::io::Result<Box<dyn malkuth_core::WireConn>> {
+    async fn connect(&self, addr: &str) -> std::io::Result<Box<dyn crate::WireConn>> {
         self.pick(addr).connect(addr).await
     }
     fn name(&self) -> &'static str {
@@ -38,7 +38,7 @@ impl malkuth_core::Transport for MultiTransport {
 }
 
 impl MultiTransport {
-    fn pick(&self, _addr: &str) -> Box<dyn malkuth_core::Transport> {
+    fn pick(&self, _addr: &str) -> Box<dyn crate::Transport> {
         #[cfg(feature = "ws")]
         if _addr.starts_with("ws://") || _addr.starts_with("wss://") {
             return Box::new(WsTransport);

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/malkuth-core", "crates/malkuth", "crates/malkuth-cli", "crates/malkuth-test-app"]
+members = ["crates/malkuth", "crates/malkuth-test-app"]
 
 [workspace.package]
 version = "0.2.0"
@@ -25,7 +25,6 @@ tokio-postgres = "0.7"
 clap = { version = "4", features = ["derive"] }
 notify = "8"
 libc = "0.2"
-malkuth-core = { path = "crates/malkuth-core", version = "0.2.0" }
 
 [profile.release]
 opt-level = 3

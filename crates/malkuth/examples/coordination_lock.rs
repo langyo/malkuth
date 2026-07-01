@@ -4,9 +4,9 @@
 
 use std::time::Duration;
 
-use malkuth::malkuth_core::lease::LeaseLock;
-use malkuth::malkuth_core::lock::FileLock;
-use malkuth::malkuth_core::traits::CoordinationLock;
+use malkuth::lease::LeaseLock;
+use malkuth::lock::FileLock;
+use malkuth::traits::CoordinationLock;
 
 #[tokio::main]
 async fn main() {

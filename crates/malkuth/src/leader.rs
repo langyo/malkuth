@@ -9,9 +9,10 @@
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crate::lease::LeaseLock;
+use crate::traits::{CoordinationLock, ElectionError, LockGuard};
+use crate::{LeaderAnnounce, LeaderElector};
 use async_trait::async_trait;
-use malkuth_core::traits::{ElectionError, LockGuard};
-use malkuth_core::{CoordinationLock, LeaderAnnounce, LeaderElector, LeaseLock};
 
 /// Lease-backed leader elector. One per group/device.
 pub struct LeaseLeaderElector {

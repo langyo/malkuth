@@ -3,8 +3,8 @@
 
 #![cfg(any(feature = "ws", feature = "ipc"))]
 
+use malkuth::Transport;
 use malkuth::{Client, Router, Server};
-use malkuth_core::Transport;
 use serde_json::json;
 use std::sync::Arc;
 

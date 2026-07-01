@@ -4,9 +4,9 @@
 
 use std::sync::Arc;
 
+use malkuth::Transport;
 use malkuth::transport::TcpTransport;
 use malkuth::{Client, Router, Supervised};
-use malkuth_core::Transport;
 use serde_json::json;
 
 #[tokio::main]

@@ -1,8 +1,8 @@
 //! End-to-end JSON-RPC over TCP (tokio).
 
+use malkuth::Transport;
 use malkuth::transport::TcpTransport;
 use malkuth::{Client, Router, Server};
-use malkuth_core::Transport;
 use serde_json::json;
 use std::sync::Arc;
 

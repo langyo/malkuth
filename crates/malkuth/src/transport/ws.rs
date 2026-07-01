@@ -3,9 +3,9 @@
 
 use std::io;
 
+use crate::{Transport, WireConn, WireListener};
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
-use malkuth_core::{Transport, WireConn, WireListener};
 use serde_json::Value;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::tungstenite::Message;

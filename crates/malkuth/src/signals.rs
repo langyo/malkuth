@@ -8,8 +8,8 @@
 //! Swap in your own `ExitSource` if you want drain triggered by something else
 //! (e.g. an in-band "stop" RPC, or a parent supervisor signal over IPC).
 
+use crate::{DrainController, ExitReason, ExitSource, ShutdownKind};
 use async_trait::async_trait;
-use malkuth_core::{DrainController, ExitReason, ExitSource, ShutdownKind};
 use tracing::{info, warn};
 
 /// OS-signal-driven exit source.

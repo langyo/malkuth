@@ -10,8 +10,8 @@ use std::io;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::traits::{CoordinationLock, LockError, LockGuard};
 use async_trait::async_trait;
-use malkuth_core::traits::{CoordinationLock, LockError, LockGuard};
 use tokio_postgres::Client;
 
 /// Postgres-backed coordination lock over a shared connection.

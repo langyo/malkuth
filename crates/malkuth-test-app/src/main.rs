@@ -15,7 +15,7 @@ use std::env;
 use std::time::{Duration, Instant};
 
 use malkuth::worker::{Supervisor, WorkerSpec};
-use malkuth_core::{DrainController, RestartPolicy, ShutdownKind};
+use malkuth::{DrainController, RestartPolicy, ShutdownKind};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::task::JoinHandle;
