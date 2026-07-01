@@ -37,7 +37,7 @@ Malkuth helps automated, long-running programs do four hard things:
 
 | Crate | What it is |
 | --- | --- |
-| **`malkuth-core`** | Runtime-light **contracts**: wire types + traits. `serde` + `event-listener` + `async-trait` only. |
+
 | **`malkuth`** | Tokio **implementations**: JSON-RPC codec/server/client, transports (tcp/ws/ipc), workers, probes, signals, lock backends (file/lease/pg), leader election. |
 | **`malkuth-cli`** | The `malkuth` binary — pod pool + file watcher + sticky reverse proxy. |
 

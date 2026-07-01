@@ -1,6 +1,6 @@
 # Quick Start
 
-> **0.2 API.** Malkuth is now a tokio-based workspace (`malkuth-core` contracts +
+> **0.2 API.** Malkuth is now a tokio-based workspace (unified crate with feature gates.
 > `malkuth` implementations + `malkuth-cli`). This guide shows the library and
 > the CLI.
 
@@ -19,7 +19,7 @@ malkuth = { git = "https://github.com/celestia-island/malkuth.git", branch = "de
 use std::sync::Arc;
 use malkuth::{Router, Server, Supervised};
 use malkuth::transport::TcpTransport;
-use malkuth_core::Transport;
+use malkuth::Transport;
 use serde_json::json;
 
 #[tokio::main]
@@ -49,7 +49,7 @@ async fn main() -> std::io::Result<()> {
 ```rust
 use malkuth::{Client};
 use malkuth::transport::TcpTransport;
-use malkuth_core::Transport;
+use malkuth::Transport;
 use serde_json::json;
 
 let mut c = Client::connect(&TcpTransport, "tcp://127.0.0.1:8080").await?;

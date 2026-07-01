@@ -406,7 +406,7 @@ trait boundaries:
    (`tokio::net`, `tokio::process`, `tokio::signal`, `tokio-tungstenite`).
    Runtime-pluggability (async-std / smol) was dropped: `interprocess`'s async
    support is tokio-only, `pg_advisory_lock` is tokio-postgres, and tokio is the
-   de-facto Rust executor. The contract layer (`malkuth-core`) remains
+   de-facto Rust executor. The contract layer (now folded into `malkuth`) remains
    runtime-light (no hard runtime dependency).
 
 2. **CoordinationLock backends all implemented.** `file-lock` (POSIX `flock`),
