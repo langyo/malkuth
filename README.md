@@ -105,7 +105,7 @@ coordination? The `pg-lock` feature provides a `CoordinationLock` backend.
 | `worker` | Supervised child-process workers (`tokio::process`) |
 | `probes` | axum `/healthz` + `/readyz` router |
 | `file-lock` | POSIX `flock` `CoordinationLock` backend (unix) |
-| `lease` | File-lease `CoordinationLock` with TTL auto-exppiry (crash-safe) |
+| `lease` | File-lease `CoordinationLock` with TTL auto-expiry (crash-safe) |
 | `pg-lock` | PostgreSQL `pg_advisory_lock` backend (`tokio-postgres`) |
 | `replica` | In-memory `InstanceRegistry` |
 | `leader-follower` | `LeaseLeaderElector` (over the lease backend) |

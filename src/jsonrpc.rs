@@ -1,6 +1,6 @@
 //! JSON-RPC 2.0 envelope types, error codes and (de)serialization.
 //!
-//! Wire framing (NDJSON) lives in `crate::FramedConn`; this module only
+//! Wire framing (NDJSON) lives in `crate::codec::FramedConn`; this module only
 //! deals with the request/response/error shapes and the handler dispatch.
 
 use std::sync::Arc;

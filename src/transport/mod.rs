@@ -18,8 +18,8 @@ pub use ipc::IpcTransport;
 /// A transport that dispatches by URL scheme to the built-in backends.
 ///
 /// - `tcp://host:port` (or bare `host:port`) → [`TcpTransport`]
-/// - `ws://…` / `wss://…` → [`WsTransport`]  (feature `ws`)
-/// - `ipc:/path` or `ipc:name` → [`IpcTransport`]  (feature `ipc`)
+/// - `ws://…` / `wss://…` → `WsTransport`  (feature `ws`)
+/// - `ipc:/path` or `ipc:name` → `IpcTransport`  (feature `ipc`)
 ///
 /// For unrecognised schemes, falls back to TCP.
 pub struct MultiTransport;

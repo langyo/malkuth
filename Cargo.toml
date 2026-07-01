@@ -11,7 +11,7 @@ readme = "README.md"
 keywords = ["supervisor", "graceful-shutdown", "rolling-update", "jsonrpc", "socket-activation"]
 categories = ["asynchronous", "network-programming", "development-tools"]
 publish = true
-exclude = ["docs/", "scripts/", ".github/", "benches/", "justfile", "rust-toolchain.toml"]
+exclude = ["docs/", "scripts/", ".github/", "justfile", "rust-toolchain.toml"]
 
 [features]
 default = ["tcp", "signals"]
