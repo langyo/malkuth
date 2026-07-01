@@ -5,8 +5,12 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
-license-file.workspace = true
+license-file = "LICENSE"
 repository.workspace = true
+readme = "../../docs/en/README.md"
+keywords = ["supervisor", "graceful-shutdown", "rolling-update", "proxy", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+publish = true
 
 [[bin]]
 name = "malkuth"

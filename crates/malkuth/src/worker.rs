@@ -101,15 +101,18 @@ impl Supervisor {
 
     /// Run the supervision loop until `drain` begins, then return final snapshots.
     pub async fn run(self, drain: DrainController) -> Vec<WorkerInfo> {
-        let mut handles: FuturesUnordered<std::pin::Pin<Box<dyn std::future::Future<Output = WorkerInfo> + Send>>> =
-            FuturesUnordered::new();
+        let mut handles: FuturesUnordered<
+            std::pin::Pin<Box<dyn std::future::Future<Output = WorkerInfo> + Send>>,
+        > = FuturesUnordered::new();
         for spec in self.specs {
             let drain = drain.clone();
             let (max_restarts, window, cooldown) = (self.max_restarts, self.window, self.cooldown);
             handles.push(Box::pin(async move {
                 supervise_one(spec, max_restarts, window, cooldown, drain).await
             })
-                as std::pin::Pin<Box<dyn std::future::Future<Output = WorkerInfo> + Send>>);
+                as std::pin::Pin<
+                    Box<dyn std::future::Future<Output = WorkerInfo> + Send>,
+                >);
         }
         let mut results = Vec::new();
         while let Some(info) = handles.next().await {
@@ -220,7 +223,10 @@ async fn rate_limited(
     restart_times.retain(|t| now.duration_since(*t) < window);
     restart_times.push(now);
     if restart_times.len() as u32 > max_restarts {
-        warn!(restarts = restart_times.len(), "restart rate limit tripped, entering cooldown");
+        warn!(
+            restarts = restart_times.len(),
+            "restart rate limit tripped, entering cooldown"
+        );
         tokio::select! {
             _ = tokio::time::sleep(cooldown) => {}
             _ = drain.wait_for_drain() => {}
