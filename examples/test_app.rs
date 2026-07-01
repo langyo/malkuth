@@ -152,7 +152,8 @@ async fn supervise(pods_n: usize, port_base: u16) {
     // Spawn the supervisor so it isn't dropped by select! (kill_on_drop would
     // kill every child instantly). Signal triggers drain, then we await the
     // supervisor to let it finish draining.
-    let sup_handle = tokio::spawn(async move { sup.run(drain.clone()).await });
+    let drain_for_sup = drain.clone();
+    let sup_handle = tokio::spawn(async move { sup.run(drain_for_sup).await });
     tokio::signal::ctrl_c().await.ok();
     eprintln!("SUPERVISE_STOP signal; draining");
     drain.begin_drain(ShutdownKind::Graceful);
