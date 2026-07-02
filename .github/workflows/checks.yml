@@ -84,7 +84,7 @@ jobs:
             ubuntu-latest-stable-cargo-
 
       - name: Build CLI + test-app
-        run: cargo build -p malkuth-cli -p malkuth-test-app
+        run: cargo build --features cli,worker && cargo build --example test_app --features tcp,worker,signals
 
       - name: Run the Python scripts/ suite
         run: python3 scripts/tests/run_all.py
