@@ -23,14 +23,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Render the multilingual docs tree with Lagrange (replaces mdBook).
-      # The composite action checks celestia-island/lagrange out alongside
-      # this repo and runs `lagrange build --src docs --out _site`.
-      - uses: celestia-island/lagrange/.github/actions/build@dev
-        with:
-          src: docs
-          out: _site
-
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install lagrange-library --locked || cargo install --git https://github.com/celestia-island/lagrange --branch dev lagrange-library
+      - run: lagrange build --src docs --out _site
       - run: echo "malkuth.docs.celestia.world" > _site/CNAME
 
       - uses: actions/upload-pages-artifact@v3
