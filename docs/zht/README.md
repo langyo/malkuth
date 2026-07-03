@@ -2,7 +2,7 @@
 
 <h1 align="center">Malkuth</h1>
 
-<p align="center"><strong>可組合的 Rust 服務監管工具包 —— 基於可插拔傳輸的 JSON-RPC、受監管的 worker、協調鎖與領導者選舉，外加一個 watchdog 命令列工具。</strong></p>
+<p align="center"><strong>可組合的 Rust 服務監管工具包 —— 基於可插拔傳輸的 JSON-RPC、受監管的 worker、協調鎖與領導者選舉，外加一個 watchdog 命令列工具</strong></p>
 
 <div align="center">
 

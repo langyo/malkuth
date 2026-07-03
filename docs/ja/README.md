@@ -2,7 +2,7 @@
 
 <h1 align="center">Malkuth</h1>
 
-<p align="center"><strong>Rust 向けのコンポーザブルなサービス監視ツールキット — プラグ可能なトランスポート上の JSON-RPC、監視付きワーカー、協調ロックとリーダー選出、そして watchdog CLI。</strong></p>
+<p align="center"><strong>Rust 向けのコンポーザブルなサービス監視ツールキット — プラグ可能なトランスポート上の JSON-RPC、監視付きワーカー、協調ロックとリーダー選出、そして watchdog CLI</strong></p>
 
 <div align="center">
 

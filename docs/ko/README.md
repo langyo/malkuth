@@ -2,7 +2,7 @@
 
 <h1 align="center">Malkuth</h1>
 
-<p align="center"><strong>Rust용 컴포저블 서비스 감독 툴킷 — 플러그 가능한 트랜스포트 위의 JSON-RPC, 감독되는 워커, 조정 잠금과 리더 선출, 그리고 watchdog CLI.</strong></p>
+<p align="center"><strong>Rust용 컴포저블 서비스 감독 툴킷 — 플러그 가능한 트랜스포트 위의 JSON-RPC, 감독되는 워커, 조정 잠금과 리더 선출, 그리고 watchdog CLI</strong></p>
 
 <div align="center">
 

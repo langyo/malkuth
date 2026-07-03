@@ -2,7 +2,7 @@
 
 <h1 align="center">Malkuth</h1>
 
-<p align="center"><strong>可组合的 Rust 服务监管工具包 —— 基于可插拔传输的 JSON-RPC、受监管 worker、协调锁与领导者选举，外加一个 watchdog 命令行工具。</strong></p>
+<p align="center"><strong>可组合的 Rust 服务监管工具包 —— 基于可插拔传输的 JSON-RPC、受监管 worker、协调锁与领导者选举，外加一个 watchdog 命令行工具</strong></p>
 
 <div align="center">
 

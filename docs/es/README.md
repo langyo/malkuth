@@ -2,7 +2,7 @@
 
 <h1 align="center">Malkuth</h1>
 
-<p align="center"><strong>Kit de herramientas componible para la supervisión de servicios en Rust — JSON-RPC sobre transportes conectables, workers supervisados, bloqueos de coordinación y elección de líder, más un CLI watchdog.</strong></p>
+<p align="center"><strong>Kit de herramientas componible para la supervisión de servicios en Rust — JSON-RPC sobre transportes conectables, workers supervisados, bloqueos de coordinación y elección de líder, más un CLI watchdog</strong></p>
 
 <div align="center">
 

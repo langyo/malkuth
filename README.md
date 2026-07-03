@@ -2,7 +2,7 @@
 
 <h1 align="center">Malkuth</h1>
 
-<p align="center"><strong>Composable service-supervision toolkit for Rust — JSON-RPC over pluggable transports, supervised workers, coordination locks &amp; leader election, plus a watchdog CLI.</strong></p>
+<p align="center"><strong>Composable service-supervision toolkit for Rust — JSON-RPC over pluggable transports, supervised workers, coordination locks &amp; leader election, plus a watchdog CLI</strong></p>
 
 <div align="center">
 
