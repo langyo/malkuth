@@ -2,7 +2,7 @@
 
 <h1 align="center">Malkuth</h1>
 
-<p align="center"><strong>Kit de herramientas componible para la supervisión de servicios en Rust — JSON-RPC sobre transportes conectables, workers supervisados, bloqueos de coordinación y elección de líder, más un CLI watchdog</strong></p>
+<p align="center"><strong>Kit de herramientas componible para la supervisión de servicios en Rust</strong></p>
 
 <div align="center">
 
@@ -29,7 +29,7 @@ Malkuth ayuda a los programas automatizados y de larga duración a hacer cuatro 
 3. **Facilidades opcionales y conectables mediante hooks** — la fuente de salida, las sondas, los hooks de latido y de drenaje son *traits*. Usa los predeterminados (señal de salida del SO, sondas axum, workers supervisados) o proporciona los tuyos (p. ej. activar el drenaje desde un comando "stop" en banda que reciba tu servidor). Un orquestador `Supervised` «con pilas incluidas» los conecta entre sí.
 4. **Un CLI watchdog** — `malkuth -- <cmd>` envuelve un programa con observación de archivos, un pool de pods y un proxy inverso persistente de capa 4.
 
-## El CLI (envuelve cualquier cosa)
+## Como CLI
 
 ```
 malkuth [--watch PATH]... [--proxy PUBLIC:LO-HI] [--pod-count N] -- <cmd> [args...]
@@ -45,7 +45,7 @@ malkuth --watch ./src --watch ./res \
 
 El proxy enruta cada **IP de cliente** a un backend fijo mediante hashing consistente, de modo que un cliente siga alcanzando el mismo pod hasta que ese pod se reinicie o se reduzca la escala — la base para lanzamientos graduales / reinicios progresivos. Ante un cambio de archivo, drena y reinicia un pod a la vez.
 
-## La biblioteca (incrústala en tu propio servicio)
+## Como biblioteca
 
 ```toml
 [dependencies]

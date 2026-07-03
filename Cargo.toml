@@ -1,6 +1,6 @@
 [package]
 name = "malkuth"
-description = "Service-supervision toolkit: JSON-RPC over pluggable transports, supervised workers, split health probes, coordination locks and lease-based leader election. Tokio-based."
+description = "A composable service-supervision toolkit for Rust"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"

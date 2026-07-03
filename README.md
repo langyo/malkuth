@@ -2,7 +2,7 @@
 
 <h1 align="center">Malkuth</h1>
 
-<p align="center"><strong>Composable service-supervision toolkit for Rust — JSON-RPC over pluggable transports, supervised workers, coordination locks &amp; leader election, plus a watchdog CLI</strong></p>
+<p align="center"><strong>Composable service-supervision toolkit for Rust</strong></p>
 
 <div align="center">
 
@@ -16,27 +16,19 @@
 
 </div>
 
-> **Version 0.1.0** — Single crate, **tokio-based**. The CLI wraps *any* program
-> (even one that does not use the library) with a pod pool and a sticky reverse
-> proxy.
+Malkuth helps automated, long-running programs handle supervision —
+graceful shutdown, health probes, coordination locks, and rolling updates:
 
-Malkuth helps automated, long-running programs do four hard things:
+1. **Pluggable transport** — JSON-RPC over TCP, WebSocket, or IPC (Unix sockets /
+   named pipes). One `Transport` trait, dispatched by URL scheme.
+2. **Supervised workers** — spawn a process, monitor its health, restart it on
+   failure, drain connections before shutdown.
+3. **Optional facilities** — exit source, probes, heartbeat and drain hooks are
+   *traits*. Use the defaults or supply your own.
+4. **A watchdog CLI** — `malkuth -- <cmd>` wraps any program with file watching,
+   a pod pool, and an L4 sticky reverse proxy.
 
-1. **Pluggable transport** — JSON-RPC over local TCP loopback, remote
-   **WebSocket**, or local **IPC** (Unix sockets / named pipes via
-   [`interprocess`](https://crates.io/crates/interprocess)). One `Transport`
-   trait, dispatched by URL scheme.
-2. **Tokio-based, framework-light** — built on `tokio`; the JSON-RPC path needs
-   no HTTP framework (axum is optional, for HTTP probes only).
-3. **Optional, hookable facilities** — exit source, probes, heartbeat and drain
-   hooks are *traits*. Use the defaults (OS-signal exit, axum probes, supervised
-   workers) or supply your own (e.g. trigger drain from an in-band "stop" command
-   your server receives). A batteries-included `Supervised` orchestrator wires
-   them together.
-4. **A watchdog CLI** — `malkuth -- <cmd>` wraps a program with file watching, a
-   pod pool, and an L4 sticky reverse proxy.
-
-## The CLI (wraps anything)
+## As a CLI
 
 ```
 malkuth [--watch PATH]... [--proxy PUBLIC:LO-HI] [--pod-count N] -- <cmd> [args...]
@@ -56,7 +48,7 @@ a client keeps hitting the same pod until that pod restarts or scales down — t
 basis for gray release / rolling restart. On a file change it drains and
 restarts one pod at a time.
 
-## The library (embed in your own service)
+## As a library
 
 ```toml
 [dependencies]

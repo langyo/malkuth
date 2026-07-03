@@ -2,7 +2,7 @@
 
 <h1 align="center">Malkuth</h1>
 
-<p align="center"><strong>可組合的 Rust 服務監管工具包 —— 基於可插拔傳輸的 JSON-RPC、受監管的 worker、協調鎖與領導者選舉，外加一個 watchdog 命令列工具</strong></p>
+<p align="center"><strong>可組合的 Rust 服務監管工具包</strong></p>
 
 <div align="center">
 
@@ -34,7 +34,7 @@ Malkuth 幫助自動化、長期執行的程式完成四件難事：
 4. **一個 watchdog 命令列工具** —— `malkuth -- <cmd>` 用檔案監看、一個
    pod 池與一個 L4 黏性反向代理來封裝程式。
 
-## 命令列工具（可封裝任何程式）
+## 以 CLI 使用
 
 ```
 malkuth [--watch PATH]... [--proxy PUBLIC:LO-HI] [--pod-count N] -- <cmd> [args...]
@@ -50,7 +50,7 @@ malkuth --watch ./src --watch ./res \
 
 代理透過一致性雜湊將每個**客戶端 IP** 路由到固定的後端，因此客戶端會持續連接到同一個 pod，直到該 pod 重啟或縮減為止 —— 這是灰度發布／滾動重啟的基礎。當檔案變更時，它會逐個排空並重啟 pod。
 
-## 函式庫（嵌入你自己的服務）
+## 以依賴庫使用
 
 ```toml
 [dependencies]

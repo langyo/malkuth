@@ -2,7 +2,7 @@
 
 <h1 align="center">Malkuth</h1>
 
-<p align="center"><strong>Rust 向けのコンポーザブルなサービス監視ツールキット — プラグ可能なトランスポート上の JSON-RPC、監視付きワーカー、協調ロックとリーダー選出、そして watchdog CLI</strong></p>
+<p align="center"><strong>Rust 向けのコンポーザブルなサービス監視ツールキット</strong></p>
 
 <div align="center">
 
@@ -35,7 +35,7 @@ Malkuth は、自動化された長時間実行されるプログラムが四つ
 4. **watchdog CLI** — `malkuth -- <cmd>` はプログラムをファイル監視、
    pod プール、L4 スティッキーリバースプロキシで包み込みます。
 
-## CLI（任意のプログラムを包み込む）
+## CLI として使用
 
 ```
 malkuth [--watch PATH]... [--proxy PUBLIC:LO-HI] [--pod-count N] -- <cmd> [args...]
@@ -54,7 +54,7 @@ malkuth --watch ./src --watch ./res \
 クライアントは pod が再起動またはスケールダウンするまで同じ pod にアクセスし続けます — これはグレーリリース
 / ローリング再起動の基盤となります。ファイル変更時には、一度に一つの pod をドレインして再起動します。
 
-## ライブラリ（自身のサービスに組み込む）
+## ライブラリとして使用
 
 ```toml
 [dependencies]

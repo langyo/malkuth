@@ -2,7 +2,7 @@
 
 <h1 align="center">Malkuth</h1>
 
-<p align="center"><strong>Boîte à outils composable de supervision de services pour Rust — JSON-RPC sur transports enfichables, workers supervisés, verrous de coordination et élection de leader, plus un CLI watchdog</strong></p>
+<p align="center"><strong>Boîte à outils composable de supervision de services pour Rust</strong></p>
 
 <div align="center">
 
@@ -36,7 +36,7 @@ Malkuth aide les programmes automatisés et de longue durée à accomplir quatre
 4. **Un CLI watchdog** — `malkuth -- <cmd>` enveloppe un programme avec surveillance de fichiers, un
    pool de pods et un proxy inverse persistant de couche 4.
 
-## Le CLI (enveloppe n'importe quoi)
+## En CLI
 
 ```
 malkuth [--watch PATH]... [--proxy PUBLIC:LO-HI] [--pod-count N] -- <cmd> [args...]
@@ -56,7 +56,7 @@ client continue d'atteindre le même pod jusqu'à ce que celui-ci redémarre ou 
 base pour une release grise / un redémarrage progressif. Lors d'un changement de fichier, il draine et
 redémarre un pod à la fois.
 
-## La bibliothèque (à intégrer dans votre propre service)
+## En bibliothèque
 
 ```toml
 [dependencies]

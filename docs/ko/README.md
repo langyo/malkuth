@@ -2,7 +2,7 @@
 
 <h1 align="center">Malkuth</h1>
 
-<p align="center"><strong>Rust용 컴포저블 서비스 감독 툴킷 — 플러그 가능한 트랜스포트 위의 JSON-RPC, 감독되는 워커, 조정 잠금과 리더 선출, 그리고 watchdog CLI</strong></p>
+<p align="center"><strong>Rust용 컴포저블 서비스 감독 툴킷</strong></p>
 
 <div align="center">
 
@@ -36,7 +36,7 @@ Malkuth는 자동화되어 장시간 실행되는 프로그램이 네 가지 어
 4. **watchdog CLI** — `malkuth -- <cmd>`는 프로그램을 파일 감시,
    pod 풀, L4 스티키 리버스 프록시로 감쌉니다.
 
-## CLI (무엇이든 감쌉니다)
+## CLI로 사용
 
 ```
 malkuth [--watch PATH]... [--proxy PUBLIC:LO-HI] [--pod-count N] -- <cmd> [args...]
@@ -56,7 +56,7 @@ malkuth --watch ./src --watch ./res \
 이것이 그레이 릴리스 / 롤링 재시작의 기반입니다. 파일 변경 시 한 번에 하나의
 pod씩 드레인 및 재시작합니다.
 
-## 라이브러리 (자체 서비스에 임베드)
+## 라이브러리로 사용
 
 ```toml
 [dependencies]
