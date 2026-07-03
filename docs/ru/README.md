@@ -4,9 +4,17 @@
 
 <p align="center"><strong>Компонуемый набор инструментов для контроля служб на Rust — JSON-RPC поверх подключаемых транспортов, контролируемые воркеры, координационные блокировки и выбор лидера, а также CLI-наблюдатель (watchdog).</strong></p>
 
+<div align="center">
+
 [![License](https://img.shields.io/badge/license-SySL%201.0-blue)](../../LICENSE) [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/) [![GitHub](https://img.shields.io/badge/github-celestia--island%2Fmalkuth-blue.svg)](https://github.com/celestia-island/malkuth) [![Checks](https://img.shields.io/github/actions/workflow/status/celestia-island/malkuth/checks.yml)](https://github.com/celestia-island/malkuth/actions/workflows/checks.yml) [![Docs](https://img.shields.io/badge/docs-malkuth.docs.celestia.world-blue)](https://malkuth.docs.celestia.world)
 
+</div>
+
+<div align="center">
+
 [English](../en/README.md) · [简体中文](../zhs/README.md) · [繁體中文](../zht/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Français](../fr/README.md) · [Español](../es/README.md) · **Русский** · [العربية](../ar/README.md)
+
+</div>
 
 > **Версия 0.1.0** — Одиночный крейт, **на базе tokio**. CLI оборачивает *любую*
 > программу (даже ту, что не использует библиотеку) пулом подов и закреплённым

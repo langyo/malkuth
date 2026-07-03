@@ -4,9 +4,17 @@
 
 <p align="center"><strong>可组合的 Rust 服务监管工具包 —— 基于可插拔传输的 JSON-RPC、受监管 worker、协调锁与领导者选举，外加一个 watchdog 命令行工具。</strong></p>
 
+<div align="center">
+
 [![License](https://img.shields.io/badge/license-SySL%201.0-blue)](../../LICENSE) [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/) [![GitHub](https://img.shields.io/badge/github-celestia--island%2Fmalkuth-blue.svg)](https://github.com/celestia-island/malkuth) [![Checks](https://img.shields.io/github/actions/workflow/status/celestia-island/malkuth/checks.yml)](https://github.com/celestia-island/malkuth/actions/workflows/checks.yml) [![Docs](https://img.shields.io/badge/docs-malkuth.docs.celestia.world-blue)](https://malkuth.docs.celestia.world)
 
+</div>
+
+<div align="center">
+
 [English](../en/README.md) · **简体中文** · [繁體中文](../zht/README.md) · [日本語](../ja/README.md) · [한국어](../ko/README.md) · [Français](../fr/README.md) · [Español](../es/README.md) · [Русский](../ru/README.md) · [العربية](../ar/README.md)
+
+</div>
 
 > **版本 0.1.0** —— 单个 crate，**基于 tokio**。该命令行工具用一个 pod 池与一个
 > 粘性反向代理封装*任何*程序（即使该程序不使用本库）。

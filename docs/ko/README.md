@@ -4,9 +4,17 @@
 
 <p align="center"><strong>Rust용 컴포저블 서비스 감독 툴킷 — 플러그 가능한 트랜스포트 위의 JSON-RPC, 감독되는 워커, 조정 잠금과 리더 선출, 그리고 watchdog CLI.</strong></p>
 
+<div align="center">
+
 [![License](https://img.shields.io/badge/license-SySL%201.0-blue)](../../LICENSE) [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/) [![GitHub](https://img.shields.io/badge/github-celestia--island%2Fmalkuth-blue.svg)](https://github.com/celestia-island/malkuth) [![Checks](https://img.shields.io/github/actions/workflow/status/celestia-island/malkuth/checks.yml)](https://github.com/celestia-island/malkuth/actions/workflows/checks.yml) [![Docs](https://img.shields.io/badge/docs-malkuth.docs.celestia.world-blue)](https://malkuth.docs.celestia.world)
 
+</div>
+
+<div align="center">
+
 [English](../en/README.md) · [简体中文](../zhs/README.md) · [繁體中文](../zht/README.md) · [日本語](../ja/README.md) · **한국어** · [Français](../fr/README.md) · [Español](../es/README.md) · [Русский](../ru/README.md) · [العربية](../ar/README.md)
+
+</div>
 
 > **버전 0.1.0** — 단일 크레이트, **tokio 기반**. CLI는 *어떤* 프로그램이든
 > (라이브러리를 사용하지 않는 프로그램도) pod 풀과
