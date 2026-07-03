@@ -97,7 +97,6 @@ impl CoordinationLock for FileLock {
 }
 
 fn sanitize(key: &str) -> String {
-    let key_short = key;
     let mut out = String::with_capacity(key.len());
     for c in key.chars() {
         if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
@@ -110,7 +109,6 @@ fn sanitize(key: &str) -> String {
         out.push_str("default");
     }
     out.push_str(".lock");
-    let _ = key_short;
     out
 }
 
