@@ -60,6 +60,23 @@ a client keeps hitting the same pod until that pod restarts or scales down — t
 basis for gray release / rolling restart. On a file change it drains and
 restarts one pod at a time.
 
+### npx (no Rust toolchain required)
+
+Prebuilt binaries are published to npm, so you can run `malkuth` with a single
+command — no `cargo build`:
+
+```bash
+npx @celestia-island/malkuth --watch ./src -- cargo run
+npx @celestia-island/malkuth mcp        # the MCP server (needs the mcp build)
+```
+
+The `@celestia-island/malkuth` root package pulls the right platform subpackage
+(`-linux-x64` / `-darwin-arm64` / `-win32-x64`) automatically. To pin a version:
+
+```bash
+npx @celestia-island/malkuth@0.1.0 -- cargo run
+```
+
 ## As a library
 
 ```toml
