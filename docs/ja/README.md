@@ -1,4 +1,4 @@
-<p align="center"><img src="https://raw.githubusercontent.com/celestia-island/malkuth/master/docs/logo.webp" alt="Malkuth" width="240" /></p>
+<p align="center"><img src="https://raw.githubusercontent.com/celestia-island/docs.celestia.world/dev/res/logo/malkuth.webp" alt="Malkuth" width="240" /></p>
 
 <h1 align="center">Malkuth</h1>
 
@@ -115,6 +115,26 @@ Postgres バックエンドの協調機構が必要ですか？ `pg-lock` フィ
 （E2E 検証済み）。3 つの `CoordinationLock` バックエンド（`file-lock`、`lease`、
 `pg-lock`）と `leader-follower` `LeaseLeaderElector` もすべて実装されています。
 設計については [docs/design/](../en/design/) を参照してください。
+
+## MCP サーバー
+
+`mcp` feature を有効にして malkuth をビルドし、stdio サーバーを実行します——モデルコンテキストプロトコル（Model Context Protocol）経由で監視ツールキットを AI コーディングアシスタントに公開します：
+
+```bash
+malkuth mcp
+```
+
+サーバーは 2 つのツールを提供します：`malkuth_supervise`（再起動ポリシー + スライディングウィンドウ型レート制限のもとで監視スーパーバイザの下に worker 群を起動し、それらが終了またはタイムアウトするまでブロックした後、最終ステータススナップショットを返す）と `malkuth_probe`（サービス URL に対する HTTP healthz / readyz チェック）。MCP クライアントに組み込むには：
+
+```json
+{
+  "mcpServers": {
+    "malkuth": { "command": "malkuth", "args": ["mcp"] }
+  }
+}
+```
+
+`mcp` feature は `worker` + `schema` を暗黙に含みます。さらに `rmcp` とプローブツール用の `reqwest` クライアントを追加します。
 
 ## ライセンス
 

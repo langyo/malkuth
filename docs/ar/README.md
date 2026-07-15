@@ -1,4 +1,4 @@
-<p align="center"><img src="https://raw.githubusercontent.com/celestia-island/malkuth/master/docs/logo.webp" alt="Malkuth" width="240" /></p>
+<p align="center"><img src="https://raw.githubusercontent.com/celestia-island/docs.celestia.world/dev/res/logo/malkuth.webp" alt="Malkuth" width="240" /></p>
 
 <h1 align="center">Malkuth</h1>
 
@@ -115,6 +115,26 @@ async fn main() -> std::io::Result<()> {
 يعملان (مُتحقّق منهما e2e). جميع خلفيات `CoordinationLock` الثلاث
 (`file-lock`، `lease`، `pg-lock`) و `LeaseLeaderElector` الخاص بـ `leader-follower`
 مُنفَّذة. راجع [docs/design/](../en/design/) للاطّلاع على التصميم.
+
+## خادم MCP
+
+ابنِ malkuth بميزة `mcp` وشغّل خادم stdio — فهو يعرض مجموعة أدوات الإشراف لمساعدي الترميز بالذكاء الاصطناعي عبر بروتوكول سياق النموذج (Model Context Protocol):
+
+```bash
+malkuth mcp
+```
+
+يُعلن الخادم عن أداتين: `malkuth_supervise` (يشغل مجموعة من العمليات العاملة تحت المُشرف مع سياسات إعادة التشغيل + محدد معدل بنافذة منزلقة؛ يَحظر حتى خروجها أو تشغيل المهلة، ثم يُعيد لقطة الحالة النهائية) و`malkuth_probe` (فحص HTTP healthz / readyz مقابل عنوان URL للخدمة). وصله بعميل MCP:
+
+```json
+{
+  "mcpServers": {
+    "malkuth": { "command": "malkuth", "args": ["mcp"] }
+  }
+}
+```
+
+ميزة `mcp` تتضمن ضمناً `worker` + `schema`؛ تُضيف `rmcp` وعميل `reqwest` لأداة الفحص.
 
 ## الترخيص
 
