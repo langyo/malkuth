@@ -1,4 +1,4 @@
-<p align="center"><img src="https://raw.githubusercontent.com/celestia-island/malkuth/master/docs/logo.webp" alt="Malkuth" width="240" /></p>
+<p align="center"><img src="https://raw.githubusercontent.com/celestia-island/docs.celestia.world/dev/res/logo/malkuth.webp" alt="Malkuth" width="240" /></p>
 
 <h1 align="center">Malkuth</h1>
 
@@ -104,6 +104,26 @@ Las capas 1–3 (ciclo de vida/drenaje, sondas, transferencia de escucha) y el n
 (codec + servidor/cliente + transportes tcp/ws/ipc) están implementados y probados
 de extremo a extremo. El pool de pods del CLI + proxy persistente está funcionando (verificado e2e). Los tres backends `CoordinationLock` (`file-lock`, `lease`, `pg-lock`) y el `LeaseLeaderElector` de `leader-follower` están implementados. Consulta
 [docs/design/](../en/design/) para el diseño.
+
+## Servidor MCP
+
+Construye malkuth con la feature `mcp` y ejecuta el servidor stdio — expone el toolkit de supervisión a los asistentes de codificación de IA a través del Model Context Protocol:
+
+```bash
+malkuth mcp
+```
+
+El servidor anuncia dos herramientas: `malkuth_supervise` (lanza un conjunto de workers bajo el supervisor con políticas de reinicio + un limitador de tasa de ventana deslizante; se bloquea hasta que terminan o se dispara el timeout, luego devuelve la instantánea de estado final) y `malkuth_probe` (comprobación HTTP healthz / readyz contra una URL de servicio). Conéctalo a un cliente MCP:
+
+```json
+{
+  "mcpServers": {
+    "malkuth": { "command": "malkuth", "args": ["mcp"] }
+  }
+}
+```
+
+La feature `mcp` implica `worker` + `schema`; añade `rmcp` y un cliente `reqwest` para la herramienta de sonda.
 
 ## Licencia
 

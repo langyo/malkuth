@@ -1,4 +1,4 @@
-<p align="center"><img src="https://raw.githubusercontent.com/celestia-island/malkuth/master/docs/logo.webp" alt="Malkuth" width="240" /></p>
+<p align="center"><img src="https://raw.githubusercontent.com/celestia-island/docs.celestia.world/dev/res/logo/malkuth.webp" alt="Malkuth" width="240" /></p>
 
 <h1 align="center">Malkuth</h1>
 
@@ -120,6 +120,26 @@ end-to-end. Пул подов CLI + закреплённый обратный п
 e2e). Все три бэкенда `CoordinationLock` (`file-lock`, `lease`, `pg-lock`) и
 `LeaseLeaderElector` в режиме leader-follower реализованы. См.
 [проектирование](../en/design/).
+
+## MCP-сервер
+
+Соберите malkuth с feature `mcp` и запустите stdio-сервер — он предоставляет набор инструментов супервизора AI-ассистентам программиста по протоколу Model Context Protocol:
+
+```bash
+malkuth mcp
+```
+
+Сервер предоставляет два инструмента: `malkuth_supervise` (запускает набор воркеров под супервизором с политиками перезапуска + скользящим ограничением скорости; блокируется до их завершения или срабатывания тайм-аута, затем возвращает финальный снимок состояния) и `malkuth_probe` (проверка HTTP healthz / readyz по URL сервиса). Подключите его к MCP-клиенту:
+
+```json
+{
+  "mcpServers": {
+    "malkuth": { "command": "malkuth", "args": ["mcp"] }
+  }
+}
+```
+
+Feature `mcp` неявно включает `worker` + `schema`; она добавляет `rmcp` и клиент `reqwest` для инструмента проверки.
 
 ## Лицензия
 

@@ -21,6 +21,19 @@ use pool::{PodManager, assign_ports};
 use proxy::{ProxyState, run_proxy};
 use tracing::{error, info};
 
+/// Formats timestamps as local time `YYYY-MM-DD HH:MM:SS` (no timezone suffix),
+/// matching the format used by sibling celestia-island CLIs (e.g. lagrange).
+struct MalkuthTimer;
+
+impl tracing_subscriber::fmt::time::FormatTime for MalkuthTimer {
+    fn format_time(
+        &self,
+        w: &mut tracing_subscriber::fmt::format::Writer<'_>,
+    ) -> std::fmt::Result {
+        write!(w, "{}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"))
+    }
+}
+
 #[tokio::main]
 async fn main() {
     // Intercept `malkuth mcp` before the watchdog arg parser runs: the
@@ -44,6 +57,7 @@ async fn main() {
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
+        .with_timer(MalkuthTimer)
         .init();
 
     let args = Args::parse();
