@@ -26,10 +26,7 @@ use tracing::{error, info};
 struct MalkuthTimer;
 
 impl tracing_subscriber::fmt::time::FormatTime for MalkuthTimer {
-    fn format_time(
-        &self,
-        w: &mut tracing_subscriber::fmt::format::Writer<'_>,
-    ) -> std::fmt::Result {
+    fn format_time(&self, w: &mut tracing_subscriber::fmt::format::Writer<'_>) -> std::fmt::Result {
         write!(w, "{}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"))
     }
 }
